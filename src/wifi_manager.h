@@ -14,9 +14,9 @@ public:
     void attemptOTAUpdate();
     
 private:
-    WiFiServer wifiServer;
-    WiFiServer wifiOBDII;
+    // WiFiServer wifiServer;
+    // WiFiServer wifiOBDII;
     WiFiClient wifiClient;
-    WiFiUDP wifiUDPServer;
+    // WiFiUDP wifiUDPServer;
     uint32_t lastBroadcast;
 };

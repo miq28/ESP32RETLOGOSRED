@@ -56,7 +56,7 @@ void CANManager::setup()
             canBuses[i]->disable();
         }
     }
-
+#ifndef CONFIG_IDF_TARGET_ESP32S3
     if (settings.systemType == 2) //Macchina 5-CAN Board
     {
         uint8_t stdbymode;
@@ -72,6 +72,7 @@ void CANManager::setup()
             can->Write8(0xE04, stdbymode);
         }
     }
+#endif
 
     for (int j = 0; j < NUM_BUSES; j++)
     {

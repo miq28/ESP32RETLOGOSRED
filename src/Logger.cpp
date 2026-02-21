@@ -230,7 +230,7 @@ void Logger::logMessage(const char *format, va_list args)
             }
 
             if (*format == 's') {
-                register char *s = (char *) va_arg(args, int);
+                char *s = (char *) va_arg(args, int);
                 writeLen = sprintf((char*)&buffer[buffLen], "%s", s);
                 buffLen += writeLen;
                 continue;

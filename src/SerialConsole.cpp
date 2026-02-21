@@ -45,7 +45,7 @@ SerialConsole::SerialConsole()
 
 void SerialConsole::init()
 {
-    //State variables for serial console
+    // State variables for serial console
     ptrBuffer = 0;
     state = STATE_ROOT_MENU;
 }
@@ -53,7 +53,7 @@ void SerialConsole::init()
 void SerialConsole::printMenu()
 {
     char buff[80];
-    //Show build # here as well in case people are using the native port and don't get to see the start up messages
+    // Show build # here as well in case people are using the native port and don't get to see the start up messages
     Serial.print("Build number: ");
     Serial.println(CFG_BUILD_NUM);
     Serial.println("System Menu:");
@@ -88,8 +88,8 @@ void SerialConsole::printMenu()
         Serial.println();
     }
 
-    //Logger::console("MARK=<Description of what you are doing> - Set a mark in the log file about what you are about to do.");
-    //Serial.println();
+    // Logger::console("MARK=<Description of what you are doing> - Set a mark in the log file about what you are about to do.");
+    // Serial.println();
 
     Logger::console("BINSERIAL=%i - Enable/Disable Binary Sending of CANBus Frames to Serial (0=Dis, 1=En)", settings.useBinarySerialComm);
     Serial.println();
@@ -113,11 +113,14 @@ void SerialConsole::printMenu()
  */
 void SerialConsole::rcvCharacter(uint8_t chr)
 {
-    if (chr == 10 || chr == 13) { //command done. Parse it.
+    if (chr == 10 || chr == 13)
+    { // command done. Parse it.
         handleConsoleCmd();
-        ptrBuffer = 0; //reset line counter once the line has been processed
-    } else {
-        cmdBuffer[ptrBuffer++] = (unsigned char) chr;
+        ptrBuffer = 0; // reset line counter once the line has been processed
+    }
+    else
+    {
+        cmdBuffer[ptrBuffer++] = (unsigned char)chr;
         if (ptrBuffer > 79)
             ptrBuffer = 79;
     }
@@ -125,18 +128,26 @@ void SerialConsole::rcvCharacter(uint8_t chr)
 
 void SerialConsole::handleConsoleCmd()
 {
-    if (state == STATE_ROOT_MENU) {
-        if (ptrBuffer == 1) {
-            //command is a single ascii character
+    if (state == STATE_ROOT_MENU)
+    {
+        if (ptrBuffer == 1)
+        {
+            // command is a single ascii character
             handleShortCmd();
-        } else { //at least two bytes
-            boolean equalSign = false;
-            for (int i = 0; i < ptrBuffer; i++) if (cmdBuffer[i] == '=') equalSign = true;
-            cmdBuffer[ptrBuffer] = 0; //make sure to null terminate
-            if (equalSign) handleConfigCmd();
-            else if (settings.enableLawicel) lawicel.handleLongCmd(cmdBuffer);
         }
-        ptrBuffer = 0; //reset line counter once the line has been processed
+        else
+        { // at least two bytes
+            boolean equalSign = false;
+            for (int i = 0; i < ptrBuffer; i++)
+                if (cmdBuffer[i] == '=')
+                    equalSign = true;
+            cmdBuffer[ptrBuffer] = 0; // make sure to null terminate
+            if (equalSign)
+                handleConfigCmd();
+            else if (settings.enableLawicel)
+                lawicel.handleLongCmd(cmdBuffer);
+        }
+        ptrBuffer = 0; // reset line counter once the line has been processed
     }
 }
 
@@ -144,31 +155,37 @@ void SerialConsole::handleShortCmd()
 {
     uint8_t val;
 
-    switch (cmdBuffer[0]) {
-    //non-lawicel commands
+    switch (cmdBuffer[0])
+    {
+    // non-lawicel commands
     case 'h':
     case '?':
     case 'H':
         printMenu();
         break;
-    case 'R': //reset to factory defaults.
+    case 'R': // reset to factory defaults.
         nvPrefs.begin(PREF_NAME, false);
         nvPrefs.clear();
-        nvPrefs.end();        
+        nvPrefs.end();
         Logger::console("Power cycle to reset to factory defaults");
         break;
     case '~':
         Serial.println("DEBUGGING MODE!");
         CAN0.setDebuggingMode(true);
+#if SOC_TWAI_CONTROLLER_NUM == 2 and ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0) or defined(HAS_EXTERNAL_CAN_CONTROLLER)
         CAN1.setDebuggingMode(true);
+#endif
         break;
     case '`':
         Serial.println("Normal mode");
         CAN0.setDebuggingMode(false);
-        CAN1.setDebuggingMode(false);
-        break;    
+#if SOC_TWAI_CONTROLLER_NUM == 2 and ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0) or defined(HAS_EXTERNAL_CAN_CONTROLLER)
+        CAN1.setDebuggingMode(true);
+#endif
+        break;
     default:
-        if (settings.enableLawicel) lawicel.handleShortCmd(cmdBuffer[0]);
+        if (settings.enableLawicel)
+            lawicel.handleShortCmd(cmdBuffer[0]);
         break;
     }
 }
@@ -182,10 +199,10 @@ void SerialConsole::handleConfigCmd()
     bool writeDigEE = false;
     char *dataTok;
 
-    //Logger::debug("Cmd size: %i", ptrBuffer);
+    // Logger::debug("Cmd size: %i", ptrBuffer);
     if (ptrBuffer < 6)
-        return; //4 digit command, =, value is at least 6 characters
-    cmdBuffer[ptrBuffer] = 0; //make sure to null terminate
+        return;               // 4 digit command, =, value is at least 6 characters
+    cmdBuffer[ptrBuffer] = 0; // make sure to null terminate
     String cmdString = String();
     unsigned char whichEntry = '0';
     i = 0;
@@ -194,187 +211,310 @@ void SerialConsole::handleConfigCmd()
     {
         cmdString.concat(String(cmdBuffer[i++]));
     }
-    i++; //skip the =
+    i++; // skip the =
     if (i >= ptrBuffer)
     {
         Logger::console("Command needs a value..ie TORQ=3000");
         Logger::console("");
-        return; //or, we could use this to display the parameter instead of setting
+        return; // or, we could use this to display the parameter instead of setting
     }
 
     // strtol() is able to parse also hex values (e.g. a string "0xCAFE"), useful for enable/disable by device id
-    newValue = strtol((char *) (cmdBuffer + i), NULL, 0); //try to turn the string into a number
-    newString = (char *)(cmdBuffer + i); //leave it as a string
+    newValue = strtol((char *)(cmdBuffer + i), NULL, 0); // try to turn the string into a number
+    newString = (char *)(cmdBuffer + i);                 // leave it as a string
 
     cmdString.toUpperCase();
 
-    if (cmdString.startsWith("CANEN")) 
+    if (cmdString.startsWith("CANEN"))
     {
         int idx = cmdString[cmdString.length() - 1] - '0';
-        if (idx < 0) idx = 0;
-        if (idx > (SysSettings.numBuses - 1)) idx = SysSettings.numBuses - 1;
-        if (newValue < 0) newValue = 0;
-        if (newValue > 1) newValue = 1;
+        if (idx < 0)
+            idx = 0;
+        if (idx > (SysSettings.numBuses - 1))
+            idx = SysSettings.numBuses - 1;
+        if (newValue < 0)
+            newValue = 0;
+        if (newValue > 1)
+            newValue = 1;
         Logger::console("Setting CAN%i Enabled to %i", idx, newValue);
         settings.canSettings[idx].enabled = newValue;
-        if (newValue == 1) 
+        if (newValue == 1)
         {
-            //CAN0.enable();
+            // CAN0.enable();
             canBuses[idx]->begin(settings.canSettings[idx].nomSpeed, 255);
             canBuses[idx]->watchFor();
         }
-        else canBuses[idx]->disable();
+        else
+            canBuses[idx]->disable();
         writeEEPROM = true;
-    } else if (cmdString.startsWith("CANSPEED")) {
+    }
+    else if (cmdString.startsWith("CANSPEED"))
+    {
         int idx = cmdString[cmdString.length() - 1] - '0';
-        if (idx < 0) idx = 0;
-        if (idx > (SysSettings.numBuses - 1)) idx = SysSettings.numBuses - 1;
+        if (idx < 0)
+            idx = 0;
+        if (idx > (SysSettings.numBuses - 1))
+            idx = SysSettings.numBuses - 1;
         if (newValue > 32000 && newValue <= 1000000)
         {
             Logger::console("Setting CAN%i Nominal Speed to %i", idx, newValue);
             settings.canSettings[idx].nomSpeed = newValue;
-            if (settings.canSettings[idx].enabled) 
+            if (settings.canSettings[idx].enabled)
             {
                 if (settings.canSettings[idx].fdMode)
                     canBuses[idx]->begin(settings.canSettings[idx].nomSpeed, settings.canSettings[idx].fdSpeed);
             }
             writeEEPROM = true;
-        } 
-        else Logger::console("Invalid baud rate! Enter a value 32000 - 1000000");
-    } else if (cmdString.startsWith("CANFDRATE")) {
+        }
+        else
+            Logger::console("Invalid baud rate! Enter a value 32000 - 1000000");
+    }
+    else if (cmdString.startsWith("CANFDRATE"))
+    {
         int idx = cmdString[cmdString.length() - 1] - '0';
-        if (idx < 0) idx = 0;
-        if (idx > (SysSettings.numBuses - 1)) idx = SysSettings.numBuses - 1;
+        if (idx < 0)
+            idx = 0;
+        if (idx > (SysSettings.numBuses - 1))
+            idx = SysSettings.numBuses - 1;
         if (canBuses[idx]->supportsFDMode())
         {
-            if (newValue > 499999 && newValue <= 8000000) {
+            if (newValue > 499999 && newValue <= 8000000)
+            {
                 Logger::console("Setting CAN%i FD Rate to %i", idx, newValue);
                 settings.canSettings[idx].fdSpeed = newValue;
-                if (settings.canSettings[idx].enabled) 
+                if (settings.canSettings[idx].enabled)
                 {
                     if (settings.canSettings[idx].fdMode)
                         canBuses[idx]->beginFD(settings.canSettings[idx].nomSpeed, settings.canSettings[idx].fdSpeed);
                 }
                 writeEEPROM = true;
-            } else Logger::console("Invalid baud rate! Enter a value 500000 - 8000000");
-        } 
-    } else if (cmdString.startsWith("CANFDMODE")) {
+            }
+            else
+                Logger::console("Invalid baud rate! Enter a value 500000 - 8000000");
+        }
+    }
+    else if (cmdString.startsWith("CANFDMODE"))
+    {
         int idx = cmdString[cmdString.length() - 1] - '0';
-        if (idx < 0) idx = 0;
-        if (idx > (SysSettings.numBuses - 1)) idx = SysSettings.numBuses - 1;
+        if (idx < 0)
+            idx = 0;
+        if (idx > (SysSettings.numBuses - 1))
+            idx = SysSettings.numBuses - 1;
         if (canBuses[idx]->supportsFDMode())
         {
-            if (newValue >= 0 && newValue <= 1) {
+            if (newValue >= 0 && newValue <= 1)
+            {
                 Logger::console("Setting CAN%i FD Mode to %i", idx, newValue);
                 settings.canSettings[idx].fdMode = newValue;
-                    if (settings.canSettings[idx].fdMode)
-                        canBuses[idx]->beginFD(settings.canSettings[idx].nomSpeed, settings.canSettings[idx].fdSpeed);
-                    else
-                        canBuses[idx]->begin(settings.canSettings[idx].nomSpeed, 255);
+                if (settings.canSettings[idx].fdMode)
+                    canBuses[idx]->beginFD(settings.canSettings[idx].nomSpeed, settings.canSettings[idx].fdSpeed);
+                else
+                    canBuses[idx]->begin(settings.canSettings[idx].nomSpeed, 255);
                 writeEEPROM = true;
-            } else Logger::console("Invalid setting! Enter a value 0 - 1");
+            }
+            else
+                Logger::console("Invalid setting! Enter a value 0 - 1");
         }
-    } else if (cmdString.startsWith("CANLISTENONLY")) {
+    }
+    else if (cmdString.startsWith("CANLISTENONLY"))
+    {
         int idx = cmdString[cmdString.length() - 1] - '0';
-        if (idx < 0) idx = 0;
-        if (idx > (SysSettings.numBuses - 1)) idx = SysSettings.numBuses - 1;
-        if (newValue >= 0 && newValue <= 1) {
+        if (idx < 0)
+            idx = 0;
+        if (idx > (SysSettings.numBuses - 1))
+            idx = SysSettings.numBuses - 1;
+        if (newValue >= 0 && newValue <= 1)
+        {
             Logger::console("Setting CAN%i Listen Only to %i", idx, newValue);
             settings.canSettings[idx].listenOnly = newValue;
-            if (settings.canSettings[idx].listenOnly) {
+            if (settings.canSettings[idx].listenOnly)
+            {
                 canBuses[idx]->setListenOnlyMode(true);
-            } else {
+            }
+            else
+            {
                 canBuses[idx]->setListenOnlyMode(false);
             }
             writeEEPROM = true;
-        } else Logger::console("Invalid setting! Enter a value 0 - 1");
-    } else if (cmdString == String("CAN0FILTER0")) { //someone should kick me in the face for this laziness... FIX THIS!
+        }
+        else
+            Logger::console("Invalid setting! Enter a value 0 - 1");
+    }
+    else if (cmdString == String("CAN0FILTER0"))
+    { // someone should kick me in the face for this laziness... FIX THIS!
         handleFilterSet(0, 0, newString);
-    } else if (cmdString == String("CAN0FILTER1")) {
-        if (handleFilterSet(0, 1, newString)) writeEEPROM = true;
-    } else if (cmdString == String("CAN0FILTER2")) {
-        if (handleFilterSet(0, 2, newString)) writeEEPROM = true;
-    } else if (cmdString == String("CAN0FILTER3")) {
-        if (handleFilterSet(0, 3, newString)) writeEEPROM = true;
-    } else if (cmdString == String("CAN0FILTER4")) {
-        if (handleFilterSet(0, 4, newString)) writeEEPROM = true;
-    } else if (cmdString == String("CAN0FILTER5")) {
-        if (handleFilterSet(0, 5, newString)) writeEEPROM = true;
-    } else if (cmdString == String("CAN0FILTER6")) {
-        if (handleFilterSet(0, 6, newString)) writeEEPROM = true;
-    } else if (cmdString == String("CAN0FILTER7")) {
-        if (handleFilterSet(0, 7, newString)) writeEEPROM = true;
-    } else if (cmdString == String("CAN1FILTER0")) {
-        if (handleFilterSet(1, 0, newString)) writeEEPROM = true;
-    } else if (cmdString == String("CAN1FILTER1")) {
-        if (handleFilterSet(1, 1, newString)) writeEEPROM = true;
-    } else if (cmdString == String("CAN1FILTER2")) {
-        if (handleFilterSet(1, 2, newString)) writeEEPROM = true;
-    } else if (cmdString == String("CAN1FILTER3")) {
-        if (handleFilterSet(1, 3, newString)) writeEEPROM = true;
-    } else if (cmdString == String("CAN1FILTER4")) {
-        if (handleFilterSet(1, 4, newString)) writeEEPROM = true;
-    } else if (cmdString == String("CAN1FILTER5")) {
-        if (handleFilterSet(1, 5, newString)) writeEEPROM = true;
-    } else if (cmdString == String("CAN1FILTER6")) {
-        if (handleFilterSet(1, 6, newString)) writeEEPROM = true;
-    } else if (cmdString == String("CAN1FILTER7")) {
-        if (handleFilterSet(1, 7, newString)) writeEEPROM = true;
-    } else if (cmdString.startsWith("CANSEND")) {
+    }
+    else if (cmdString == String("CAN0FILTER1"))
+    {
+        if (handleFilterSet(0, 1, newString))
+            writeEEPROM = true;
+    }
+    else if (cmdString == String("CAN0FILTER2"))
+    {
+        if (handleFilterSet(0, 2, newString))
+            writeEEPROM = true;
+    }
+    else if (cmdString == String("CAN0FILTER3"))
+    {
+        if (handleFilterSet(0, 3, newString))
+            writeEEPROM = true;
+    }
+    else if (cmdString == String("CAN0FILTER4"))
+    {
+        if (handleFilterSet(0, 4, newString))
+            writeEEPROM = true;
+    }
+    else if (cmdString == String("CAN0FILTER5"))
+    {
+        if (handleFilterSet(0, 5, newString))
+            writeEEPROM = true;
+    }
+    else if (cmdString == String("CAN0FILTER6"))
+    {
+        if (handleFilterSet(0, 6, newString))
+            writeEEPROM = true;
+    }
+    else if (cmdString == String("CAN0FILTER7"))
+    {
+        if (handleFilterSet(0, 7, newString))
+            writeEEPROM = true;
+    }
+    else if (cmdString == String("CAN1FILTER0"))
+    {
+        if (handleFilterSet(1, 0, newString))
+            writeEEPROM = true;
+    }
+    else if (cmdString == String("CAN1FILTER1"))
+    {
+        if (handleFilterSet(1, 1, newString))
+            writeEEPROM = true;
+    }
+    else if (cmdString == String("CAN1FILTER2"))
+    {
+        if (handleFilterSet(1, 2, newString))
+            writeEEPROM = true;
+    }
+    else if (cmdString == String("CAN1FILTER3"))
+    {
+        if (handleFilterSet(1, 3, newString))
+            writeEEPROM = true;
+    }
+    else if (cmdString == String("CAN1FILTER4"))
+    {
+        if (handleFilterSet(1, 4, newString))
+            writeEEPROM = true;
+    }
+    else if (cmdString == String("CAN1FILTER5"))
+    {
+        if (handleFilterSet(1, 5, newString))
+            writeEEPROM = true;
+    }
+    else if (cmdString == String("CAN1FILTER6"))
+    {
+        if (handleFilterSet(1, 6, newString))
+            writeEEPROM = true;
+    }
+    else if (cmdString == String("CAN1FILTER7"))
+    {
+        if (handleFilterSet(1, 7, newString))
+            writeEEPROM = true;
+    }
+    else if (cmdString.startsWith("CANSEND"))
+    {
         int idx = cmdString[cmdString.length() - 1] - '0';
-        if (idx < 0) idx = 0;
-        if (idx > (SysSettings.numBuses - 1)) idx = SysSettings.numBuses - 1;
+        if (idx < 0)
+            idx = 0;
+        if (idx > (SysSettings.numBuses - 1))
+            idx = SysSettings.numBuses - 1;
         handleCANSend(*canBuses[idx], newString);
-    } else if (cmdString == String("MARK")) { //just ascii based for now
-        if (!settings.useBinarySerialComm) Logger::console("Mark: %s", newString);
-    } else if (cmdString == String("BINSERIAL")) {
-        if (newValue < 0) newValue = 0;
-        if (newValue > 1) newValue = 1;
+    }
+    else if (cmdString == String("MARK"))
+    { // just ascii based for now
+        if (!settings.useBinarySerialComm)
+            Logger::console("Mark: %s", newString);
+    }
+    else if (cmdString == String("BINSERIAL"))
+    {
+        if (newValue < 0)
+            newValue = 0;
+        if (newValue > 1)
+            newValue = 1;
         Logger::console("Setting Serial Binary Comm to %i", newValue);
         settings.useBinarySerialComm = newValue;
         writeEEPROM = true;
-    } else if (cmdString == String("BTMODE")) {
-        if (newValue < 0) newValue = 0;
-        if (newValue > 1) newValue = 1;
+    }
+    else if (cmdString == String("BTMODE"))
+    {
+        if (newValue < 0)
+            newValue = 0;
+        if (newValue > 1)
+            newValue = 1;
         Logger::console("Setting Bluetooth Mode to %i", newValue);
         settings.enableBT = newValue;
         writeEEPROM = true;
-    } else if (cmdString == String("LAWICEL")) {
-        if (newValue < 0) newValue = 0;
-        if (newValue > 1) newValue = 1;
+    }
+    else if (cmdString == String("LAWICEL"))
+    {
+        if (newValue < 0)
+            newValue = 0;
+        if (newValue > 1)
+            newValue = 1;
         Logger::console("Setting LAWICEL Mode to %i", newValue);
         settings.enableLawicel = newValue;
-        writeEEPROM = true;        
-    } else if (cmdString == String("WIFIMODE")) {
-        if (newValue < 0) newValue = 0;
-        if (newValue > 2) newValue = 2;
-        if (newValue == 0) Logger::console("Setting Wifi Mode to OFF");
-        if (newValue == 1) Logger::console("Setting Wifi Mode to Connect to AP");
-        if (newValue == 2) Logger::console("Setting Wifi Mode to Create AP");
+        writeEEPROM = true;
+    }
+    else if (cmdString == String("WIFIMODE"))
+    {
+        if (newValue < 0)
+            newValue = 0;
+        if (newValue > 2)
+            newValue = 2;
+        if (newValue == 0)
+            Logger::console("Setting Wifi Mode to OFF");
+        if (newValue == 1)
+            Logger::console("Setting Wifi Mode to Connect to AP");
+        if (newValue == 2)
+            Logger::console("Setting Wifi Mode to Create AP");
         settings.wifiMode = newValue;
         writeEEPROM = true;
-    } else if (cmdString == String("BTNAME")) {
+    }
+    else if (cmdString == String("BTNAME"))
+    {
         Logger::console("Setting Bluetooth Name to %s", newString);
         strcpy((char *)settings.btName, newString);
         writeEEPROM = true;
-    } else if (cmdString == String("SSID")) {
+    }
+    else if (cmdString == String("SSID"))
+    {
         Logger::console("Setting SSID to %s", newString);
         strcpy((char *)settings.SSID, newString);
         writeEEPROM = true;
-    } else if (cmdString == String("WPA2KEY")) {
+    }
+    else if (cmdString == String("WPA2KEY"))
+    {
         Logger::console("Setting WPA2 Key to %s", newString);
         strcpy((char *)settings.WPA2Key, newString);
         writeEEPROM = true;
-    } else if (cmdString == String("SYSTYPE")) {
-        if (newValue < 0) newValue = 0;
-        if (newValue > 2) newValue = 2;
-        if (newValue == 0) Logger::console("Setting board type to Macchina A0");
-        if (newValue == 1) Logger::console("Setting board type to EVTV ESP32");
-        if (newValue == 2) Logger::console("Setting board type to Macchina 5CAN");
+    }
+    else if (cmdString == String("SYSTYPE"))
+    {
+        if (newValue < 0)
+            newValue = 0;
+        if (newValue > 2)
+            newValue = 2;
+        if (newValue == 0)
+            Logger::console("Setting board type to Macchina A0");
+        if (newValue == 1)
+            Logger::console("Setting board type to EVTV ESP32");
+        if (newValue == 2)
+            Logger::console("Setting board type to Macchina 5CAN");
         settings.systemType = newValue;
         writeEEPROM = true;
-    } else if (cmdString == String("LOGLEVEL")) {
-        switch (newValue) {
+    }
+    else if (cmdString == String("LOGLEVEL"))
+    {
+        switch (newValue)
+        {
         case 0:
             Logger::setLoglevel(Logger::Debug);
             settings.logLevel = 0;
@@ -406,11 +546,13 @@ void SerialConsole::handleConfigCmd()
             writeEEPROM = true;
             break;
         }
-
-    } else {
+    }
+    else
+    {
         Logger::console("Unknown command");
     }
-    if (writeEEPROM) {
+    if (writeEEPROM)
+    {
         nvPrefs.begin(PREF_NAME, false);
 
         char buff[80];
@@ -427,7 +569,7 @@ void SerialConsole::handleConfigCmd()
             sprintf(buff, "can%i-fdmode", i);
             nvPrefs.putBool(buff, settings.canSettings[i].fdMode);
         }
-        
+
         nvPrefs.putBool("binarycomm", settings.useBinarySerialComm);
         nvPrefs.putBool("enable-bt", settings.enableBT);
         nvPrefs.putBool("enableLawicel", settings.enableLawicel);
@@ -439,24 +581,30 @@ void SerialConsole::handleConfigCmd()
         nvPrefs.putString("btname", settings.btName);
         nvPrefs.end();
     }
-} 
+}
 
-//CAN0FILTER%i=%%i,%%i,%%i,%%i (ID, Mask, Extended, Enabled)", i);
+// CAN0FILTER%i=%%i,%%i,%%i,%%i (ID, Mask, Extended, Enabled)", i);
 bool SerialConsole::handleFilterSet(uint8_t bus, uint8_t filter, char *values)
 {
-    if (filter < 0 || filter > 7) return false;
-    if (bus < 0 || bus > 1) return false;
+    if (filter < 0 || filter > 7)
+        return false;
+    if (bus < 0 || bus > 1)
+        return false;
 
-    //there should be four tokens
+    // there should be four tokens
     char *idTok = strtok(values, ",");
     char *maskTok = strtok(NULL, ",");
     char *extTok = strtok(NULL, ",");
     char *enTok = strtok(NULL, ",");
 
-    if (!idTok) return false; //if any of them were null then something was wrong. Abort.
-    if (!maskTok) return false;
-    if (!extTok) return false;
-    if (!enTok) return false;
+    if (!idTok)
+        return false; // if any of them were null then something was wrong. Abort.
+    if (!maskTok)
+        return false;
+    if (!extTok)
+        return false;
+    if (!enTok)
+        return false;
 
     int idVal = strtol(idTok, NULL, 0);
     int maskVal = strtol(maskTok, NULL, 0);
@@ -465,18 +613,21 @@ bool SerialConsole::handleFilterSet(uint8_t bus, uint8_t filter, char *values)
 
     Logger::console("Setting CAN%iFILTER%i to ID 0x%x Mask 0x%x Extended %i Enabled %i", bus, filter, idVal, maskVal, extVal, enVal);
 
-    if (bus == 0) {
-        //settings.CAN0Filters[filter].id = idVal;
-        //settings.CAN0Filters[filter].mask = maskVal;
-        //settings.CAN0Filters[filter].extended = extVal;
-        //settings.CAN0Filters[filter].enabled = enVal;
-        //CAN0.setRXFilter(filter, idVal, maskVal, extVal);
-    } else if (bus == 1) {
-        //settings.CAN1Filters[filter].id = idVal;
-        //settings.CAN1Filters[filter].mask = maskVal;
-        //settings.CAN1Filters[filter].extended = extVal;
-        //settings.CAN1Filters[filter].enabled = enVal;
-        //CAN1.setRXFilter(filter, idVal, maskVal, extVal);
+    if (bus == 0)
+    {
+        // settings.CAN0Filters[filter].id = idVal;
+        // settings.CAN0Filters[filter].mask = maskVal;
+        // settings.CAN0Filters[filter].extended = extVal;
+        // settings.CAN0Filters[filter].enabled = enVal;
+        // CAN0.setRXFilter(filter, idVal, maskVal, extVal);
+    }
+    else if (bus == 1)
+    {
+        // settings.CAN1Filters[filter].id = idVal;
+        // settings.CAN1Filters[filter].mask = maskVal;
+        // settings.CAN1Filters[filter].extended = extVal;
+        // settings.CAN1Filters[filter].enabled = enVal;
+        // CAN1.setRXFilter(filter, idVal, maskVal, extVal);
     }
 
     return true;
@@ -489,33 +640,41 @@ bool SerialConsole::handleCANSend(CAN_COMMON &port, char *inputString)
     char *dataTok;
     CAN_FRAME frame;
 
-    if (!idTok) return false;
-    if (!lenTok) return false;
+    if (!idTok)
+        return false;
+    if (!lenTok)
+        return false;
 
     int idVal = strtol(idTok, NULL, 0);
     int lenVal = strtol(lenTok, NULL, 0);
 
-    for (int i = 0; i < lenVal; i++) {
+    for (int i = 0; i < lenVal; i++)
+    {
         dataTok = strtok(NULL, ",");
-        if (!dataTok) return false;
+        if (!dataTok)
+            return false;
         frame.data.byte[i] = strtol(dataTok, NULL, 0);
     }
 
-    //things seem good so try to send the frame.
+    // things seem good so try to send the frame.
     frame.id = idVal;
-    if (idVal >= 0x7FF) frame.extended = true;
-    else frame.extended = false;
+    if (idVal >= 0x7FF)
+        frame.extended = true;
+    else
+        frame.extended = false;
     frame.rtr = 0;
     frame.length = lenVal;
     port.sendFrame(frame);
-    
+
     Logger::console("Sending frame with id: 0x%x len: %i", frame.id, frame.length);
     SysSettings.txToggle = !SysSettings.txToggle;
     return true;
 }
 
-void SerialConsole::printBusName(int bus) {
-    switch (bus) {
+void SerialConsole::printBusName(int bus)
+{
+    switch (bus)
+    {
     case 0:
         Serial.print("CAN0");
         break;

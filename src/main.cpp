@@ -49,6 +49,7 @@ SystemSettings SysSettings;
 Preferences nvPrefs;
 char otaHost[40];
 char otaFilename[100];
+char deviceName[20];
 
 uint8_t espChipRevision;
 
@@ -56,28 +57,29 @@ ELM327Emu elmEmulator;
 
 WiFiManager wifiManager;
 
-GVRET_Comm_Handler serialGVRET; //gvret protocol over the serial to USB connection
-GVRET_Comm_Handler wifiGVRET; //GVRET over the wifi telnet port
-CANManager canManager; //keeps track of bus load and abstracts away some details of how things are done
+GVRET_Comm_Handler serialGVRET; // gvret protocol over the serial to USB connection
+GVRET_Comm_Handler wifiGVRET;   // GVRET over the wifi telnet port
+CANManager canManager;          // keeps track of bus load and abstracts away some details of how things are done
 LAWICELHandler lawicel;
 
 SerialConsole console;
 
 CAN_COMMON *canBuses[NUM_BUSES];
 
-//initializes all the system EEPROM values. Chances are this should be broken out a bit but
-//there is only one checksum check for all of them so it's simple to do it all here.
+// initializes all the system EEPROM values. Chances are this should be broken out a bit but
+// there is only one checksum check for all of them so it's simple to do it all here.
 void loadSettings()
 {
     Logger::console("Loading settings....");
 
-    for (int i = 0; i < NUM_BUSES; i++) canBuses[i] = nullptr;
+    for (int i = 0; i < NUM_BUSES; i++)
+        canBuses[i] = nullptr;
 
     nvPrefs.begin(PREF_NAME, false);
 
     settings.useBinarySerialComm = nvPrefs.getBool("binarycomm", false);
-    settings.logLevel = nvPrefs.getUChar("loglevel", 1); //info
-    settings.wifiMode = nvPrefs.getUChar("wifiMode", 2); //Wifi defaults to creating an AP
+    settings.logLevel = nvPrefs.getUChar("loglevel", 1); // info
+    settings.wifiMode = nvPrefs.getUChar("wifiMode", 1); // Wifi defaults to creating an AP
     settings.enableBT = nvPrefs.getBool("enable-bt", false);
     settings.enableLawicel = nvPrefs.getBool("enableLawicel", true);
     settings.systemType = 0;
@@ -102,16 +104,36 @@ void loadSettings()
 
     if (nvPrefs.getString("SSID", settings.SSID, 32) == 0)
     {
-        strcpy(settings.SSID, "NeedForStoicism");
+        if (settings.wifiMode == 1)
+        {
+            strcpy(settings.SSID, "galaxi");
+        }
+        else
+        {
+            strcpy(settings.SSID, "NeedForStoicism");
+        }
     }
 
     if (nvPrefs.getString("wpa2Key", settings.WPA2Key, 64) == 0)
     {
-        strcpy(settings.WPA2Key, "by.virtue.defended");
+        if (settings.wifiMode == 1)
+        {
+            strcpy(settings.WPA2Key, "n1n4iqb4l");
+        }
+        else
+        {
+            strcpy(settings.WPA2Key, "by.virtue.defended");
+        }
     }
+
     if (nvPrefs.getString("btname", settings.btName, 32) == 0)
     {
         strcpy(settings.btName, "ELM327-NeedForStoicism");
+    }
+
+    if (nvPrefs.getString("deviceName", deviceName, 20) == 0)
+    {
+        strcpy(deviceName, "ESP32RET");
     }
 
     char buff[80];
@@ -133,20 +155,22 @@ void loadSettings()
 
     Logger::setLoglevel((Logger::LogLevel)settings.logLevel);
 
-    for (int rx = 0; rx < NUM_BUSES; rx++) SysSettings.lawicelBusReception[rx] = true; //default to showing messages on RX 
+    for (int rx = 0; rx < NUM_BUSES; rx++)
+        SysSettings.lawicelBusReception[rx] = true; // default to showing messages on RX
 }
 
 void setup()
 {
     espChipRevision = ESP.getChipRevision();
 
-    Serial.begin(1000000);
+    // Serial.begin(1000000);
+    Serial.begin(115200);
 
     SysSettings.isWifiConnected = false;
 
     loadSettings();
 
-    if (settings.enableBT) 
+    if (settings.enableBT)
     {
         Serial.println("Starting Bluetooth");
         elmEmulator.setup();
@@ -190,7 +214,8 @@ void loop()
 
     isConnected = true;
 
-    if (SysSettings.lawicelPollCounter > 0) SysSettings.lawicelPollCounter--;
+    if (SysSettings.lawicelPollCounter > 0)
+        SysSettings.lawicelPollCounter--;
 
     canManager.loop();
     wifiManager.loop();
@@ -198,9 +223,11 @@ void loop()
     size_t wifiLength = wifiGVRET.numAvailableBytes();
     size_t serialLength = serialGVRET.numAvailableBytes();
     size_t maxLength = (wifiLength > serialLength) ? wifiLength : serialLength;
+    
 
-    if ((micros() - lastFlushMicros > SER_BUFF_FLUSH_INTERVAL) || (maxLength > (WIFI_BUFF_SIZE - 40)) )
+    if ((micros() - lastFlushMicros > SER_BUFF_FLUSH_INTERVAL) || (maxLength > (WIFI_BUFF_SIZE - 40)))
     {
+        // Serial.printf("wifiLength: %d and serialLength: %d\n", wifiLength, serialLength);
         lastFlushMicros = micros();
         if (serialLength > 0)
         {

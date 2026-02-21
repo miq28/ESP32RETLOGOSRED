@@ -29,7 +29,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "config.h"
 #include "sys_io.h"
-#include "ESP32RET.h"
+// #include "ESP32RET.h"
 #include "esp32_can.h"
 
 class SerialConsole {

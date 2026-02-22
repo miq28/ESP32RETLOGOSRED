@@ -120,14 +120,21 @@ void CANManager::sendFrame(CAN_COMMON *bus, CAN_FRAME_FD &frame)
 
 void CANManager::displayFrame(CAN_FRAME &frame, int whichBus)
 {
+    DEBUG("__PRETTY_FUNCTION__ = %s\n", __PRETTY_FUNCTION__);
     if (settings.enableLawicel && SysSettings.lawicelMode) 
     {
+        DEBUG("Sending frame to LAWICEL handler\n");
         lawicel.sendFrameToBuffer(frame, whichBus);
     } 
     else 
     {
-        if (SysSettings.isWifiActive) wifiGVRET.sendFrameToBuffer(frame, whichBus);
-        else serialGVRET.sendFrameToBuffer(frame, whichBus);
+        if (SysSettings.isWifiActive) {
+            DEBUG("Sending frame over WiFi\n");
+            wifiGVRET.sendFrameToBuffer(frame, whichBus);
+        } else {
+            DEBUG("Sending frame over Serial\n");
+            serialGVRET.sendFrameToBuffer(frame, whichBus);
+        }
     }
 }
 

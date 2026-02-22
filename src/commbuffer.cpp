@@ -54,10 +54,12 @@ void CommBuffer::sendCharString(char *str)
 }
 
 void CommBuffer::sendFrameToBuffer(CAN_FRAME &frame, int whichBus)
-{
+{   
+    DEBUG("__PRETTY_FUNCTION__ = %s\n", __PRETTY_FUNCTION__);
     uint8_t temp;
     size_t writtenBytes;
     if (settings.useBinarySerialComm) {
+        DEBUG("Using binary serial comm\n");
         if (frame.extended) frame.id |= 1 << 31;
         transmitBuffer[transmitBufferLength++] = 0xF1;
         transmitBuffer[transmitBufferLength++] = 0; //0 = canbus frame sending
@@ -79,6 +81,7 @@ void CommBuffer::sendFrameToBuffer(CAN_FRAME &frame, int whichBus)
         transmitBuffer[transmitBufferLength++] = temp;
         //Serial.write(buff, 12 + frame.length);
     } else {
+        DEBUG("Using ASCII serial comm\n");
         writtenBytes = sprintf((char *)&transmitBuffer[transmitBufferLength], "%d - %x", micros(), frame.id);
         transmitBufferLength += writtenBytes;
         if (frame.extended) sprintf((char *)&transmitBuffer[transmitBufferLength], " X ");

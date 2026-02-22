@@ -37,6 +37,8 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "can_manager.h"
 #include "lawicel.h"
 
+#include "USB.h"
+
 byte i = 0;
 
 uint32_t lastFlushMicros = 0;
@@ -87,7 +89,7 @@ void loadSettings()
     if (settings.systemType == 0)
     {
         canBuses[0] = &CAN0;
-        SysSettings.logToggle = false;
+        SysSettings.logToggle = true;
         SysSettings.txToggle = true;
         SysSettings.rxToggle = true;
         SysSettings.lawicelAutoPoll = false;
@@ -165,88 +167,95 @@ void setup()
 
     // Serial.begin(1000000);
     Serial.begin(115200);
-
-    SysSettings.isWifiConnected = false;
-
-    loadSettings();
-
-    if (settings.enableBT)
+    if (DEBUGPORT == USBSerial)
     {
-        Serial.println("Starting Bluetooth");
-        elmEmulator.setup();
+        USBSerial.begin();
+        USB.begin();
+    } else {
+        DEBUGPORT.begin(115200);
     }
-    wifiManager.setup();
 
-    Serial.println("");
-    Serial.println("=====================================");
-    Serial.println("     Hacking Cars with Logos Red     ");
-    Serial.println("                                     ");
-    Serial.println("      Choose not to be harmed        ");
-    Serial.println("      and you won't be harmed        ");
-    Serial.println("                                     ");
-    Serial.println("        - Marcus Aurelius            ");
-    Serial.println("=====================================");
-    Serial.println("");
+        SysSettings.isWifiConnected = false;
 
-    canManager.setup();
+        loadSettings();
 
-    SysSettings.lawicelMode = false;
-    SysSettings.lawicelAutoPoll = false;
-    SysSettings.lawicelTimestamping = false;
-    SysSettings.lawicelPollCounter = 0;
-}
-
-void sendMarkTriggered(int which)
-{
-    CAN_FRAME frame;
-    frame.id = 0xFFFFFFF8ull + which;
-    frame.extended = true;
-    frame.length = 0;
-    frame.rtr = 0;
-    canManager.displayFrame(frame, 0);
-}
-
-void loop()
-{
-    bool isConnected = false;
-    int serialCnt;
-    uint8_t in_byte;
-
-    isConnected = true;
-
-    if (SysSettings.lawicelPollCounter > 0)
-        SysSettings.lawicelPollCounter--;
-
-    canManager.loop();
-    wifiManager.loop();
-
-    size_t wifiLength = wifiGVRET.numAvailableBytes();
-    size_t serialLength = serialGVRET.numAvailableBytes();
-    size_t maxLength = (wifiLength > serialLength) ? wifiLength : serialLength;
-    
-
-    if ((micros() - lastFlushMicros > SER_BUFF_FLUSH_INTERVAL) || (maxLength > (WIFI_BUFF_SIZE - 40)))
-    {
-        // Serial.printf("wifiLength: %d and serialLength: %d\n", wifiLength, serialLength);
-        lastFlushMicros = micros();
-        if (serialLength > 0)
+        if (settings.enableBT)
         {
-            Serial.write(serialGVRET.getBufferedBytes(), serialLength);
-            serialGVRET.clearBufferedBytes();
+            Serial.println("Starting Bluetooth");
+            elmEmulator.setup();
         }
-        if (wifiLength > 0)
-        {
-            wifiManager.sendBufferedData();
-        }
+        wifiManager.setup();
+
+        Serial.println("");
+        Serial.println("=====================================");
+        Serial.println("     Hacking Cars with Logos Red     ");
+        Serial.println("                                     ");
+        Serial.println("      Choose not to be harmed        ");
+        Serial.println("      and you won't be harmed        ");
+        Serial.println("                                     ");
+        Serial.println("        - Marcus Aurelius            ");
+        Serial.println("=====================================");
+        Serial.println("");
+
+        canManager.setup();
+
+        SysSettings.lawicelMode = false;
+        SysSettings.lawicelAutoPoll = false;
+        SysSettings.lawicelTimestamping = false;
+        SysSettings.lawicelPollCounter = 0;
     }
 
-    serialCnt = 0;
-    while ((Serial.available() > 0) && serialCnt < 128)
+    void sendMarkTriggered(int which)
     {
-        serialCnt++;
-        in_byte = Serial.read();
-        serialGVRET.processIncomingByte(in_byte);
+        CAN_FRAME frame;
+        frame.id = 0xFFFFFFF8ull + which;
+        frame.extended = true;
+        frame.length = 0;
+        frame.rtr = 0;
+        canManager.displayFrame(frame, 0);
     }
 
-    elmEmulator.loop();
-}
+    void loop()
+    {
+        bool isConnected = false;
+        int serialCnt;
+        uint8_t in_byte;
+
+        isConnected = true;
+
+        if (SysSettings.lawicelPollCounter > 0)
+            SysSettings.lawicelPollCounter--;
+
+        canManager.loop();
+        wifiManager.loop();
+
+        size_t wifiLength = wifiGVRET.numAvailableBytes();
+        size_t serialLength = serialGVRET.numAvailableBytes();
+        size_t maxLength = (wifiLength > serialLength) ? wifiLength : serialLength;
+
+        if ((micros() - lastFlushMicros > SER_BUFF_FLUSH_INTERVAL) || (maxLength > (WIFI_BUFF_SIZE - 40)))
+        {
+            lastFlushMicros = micros();
+            if (serialLength > 0)
+            {
+                Serial.write(serialGVRET.getBufferedBytes(), serialLength);
+                // Serial.write('\n');
+                serialGVRET.clearBufferedBytes();
+            }
+            if (wifiLength > 0)
+            {
+                wifiManager.sendBufferedData();
+            }
+        }
+
+        serialCnt = 0;
+        while ((Serial.available() > 0) && serialCnt < 128)
+        {
+            serialCnt++;
+            in_byte = Serial.read();
+            DEBUG("Received byte: %02X\n", in_byte);
+            serialGVRET.processIncomingByte(in_byte);
+        }
+
+        elmEmulator.loop();
+    }

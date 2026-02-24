@@ -49,7 +49,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // #undef DEBUGPORT
 // #define DEBUGPORT Serial1
 
-// #define RELEASE
+#define RELEASE
 
 #ifndef RELEASE
 #define DEBUG(fmt, ...)                          \

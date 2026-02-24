@@ -41,11 +41,11 @@
 #include "ELM327_Emulator.h"
 // #include <Adafruit_NeoPixel.h>
 
-// #ifdef CONFIG_IDF_TARGET_ESP32 // for WeAct Studio CAN 485
-// #define RGB_BUILTIN 4
+#ifdef CONFIG_IDF_TARGET_ESP32 // for WeAct Studio CAN 485
+#define RGB_BUILTIN 4
 // #elifdef CONFIG_IDF_TARGET_ESP32S3
 // #define RGB_BUILTIN 48
-// #endif
+#endif
 //
 // Adafruit_NeoPixel led(1, RGB_BUILTIN, NEO_GRB + NEO_KHZ800);
 

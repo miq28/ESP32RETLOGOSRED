@@ -185,7 +185,8 @@ void LAWICELHandler::handleLongCmd(char *buffer)
                     outFrame.data.bytes[b] = bytes[b];
                 CAN0.sendFrame(outFrame);
             }
-#ifndef CONFIG_IDF_TARGET_ESP32S3
+
+#ifdef MCP2517_h
             if (!strcasecmp(tokens[1], "CAN1"))
             {
                 CAN_FRAME outFrame;
@@ -236,7 +237,7 @@ void LAWICELHandler::handleLongCmd(char *buffer)
                 else
                     CAN0.setRXFilter(0, filt, mask, false);
             }
-#ifndef CONFIG_IDF_TARGET_ESP32S3
+#ifdef MCP2517_h
             if (!strcasecmp(tokens[1], "CAN1"))
             {
                 if (!strcasecmp(tokens[4], "X"))
@@ -278,7 +279,8 @@ void LAWICELHandler::handleLongCmd(char *buffer)
             {
                 CAN0.begin(speed, 255);
             }
-#ifndef CONFIG_IDF_TARGET_ESP32S3
+
+#ifdef MCP2517_h
             if (!strcasecmp(tokens[1], "CAN1"))
             {
                 CAN1.begin(speed, 255);

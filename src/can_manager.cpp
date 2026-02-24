@@ -56,7 +56,7 @@ void CANManager::setup()
             canBuses[i]->disable();
         }
     }
-#ifndef CONFIG_IDF_TARGET_ESP32S3
+#ifdef MCP2517_h
     if (settings.systemType == 2) //Macchina 5-CAN Board
     {
         uint8_t stdbymode;

@@ -496,7 +496,8 @@ void WiFiManager::sendBufferedData()
     size_t len = wifiGVRET.numAvailableBytes();
     if (len == 0) return;
 
-    uint8_t* buff = wifiGVRET.getBufferedBytes();
+    uint8_t* data = wifiGVRET.getBufferedBytes();
+    size_t remaining = len;
 
     for (int a = 0; a < activeCount; )
     {
@@ -509,19 +510,23 @@ void WiFiManager::sendBufferedData()
             continue;
         }
 
-        size_t written = client->write(buff, len);
-
-        if (written == 0)  // write failed
+        while (remaining > 0)
         {
-            client->stop();
-            activeClients[a] = activeClients[--activeCount];
-            continue;
+            size_t written = client->write(data, remaining);
+            if (written == 0)
+                break;
+
+            data += written;
+            remaining -= written;
         }
 
         a++;
     }
 
-    wifiGVRET.clearBufferedBytes();
+    if (remaining == 0)
+    {
+        wifiGVRET.clearBufferedBytes();
+    }
 }
 
 // Utility to extract header value from headers

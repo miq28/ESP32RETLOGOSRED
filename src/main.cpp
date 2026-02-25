@@ -39,8 +39,6 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "USB.h"
 
-#pragma once
-
 template <size_t SIZE>
 class FastRingBuffer
 {
@@ -335,14 +333,31 @@ void loop()
         lastFlushMicros = micros();
         if (serialLength > 0)
         {
-            // Serial.write(serialGVRET.getBufferedBytes(), serialLength);
-            // Serial.write('\n');
-            onCanFrame(serialGVRET.getBufferedBytes(), serialLength);
-            handleSerialTx();
+            uint8_t *data = serialGVRET.getBufferedBytes();
+            size_t remaining = serialLength;
 
-            wifiManager.sendBufferedData();
-            serialGVRET.clearBufferedBytes();
+            while (remaining > 0)
+            {
+                size_t space = Serial.availableForWrite();
+                if (space == 0)
+                    break;
+
+                size_t chunk = remaining > space ? space : remaining;
+                size_t written = Serial.write(data, chunk);
+
+                if (written == 0)
+                    break;
+
+                data += written;
+                remaining -= written;
+            }
+
+            if (remaining == 0)
+            {
+                serialGVRET.clearBufferedBytes();
+            }
         }
+
         if (wifiLength > 0)
         {
             wifiManager.sendBufferedData();

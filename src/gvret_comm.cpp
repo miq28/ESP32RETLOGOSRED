@@ -8,7 +8,7 @@ Implements handling of the GVRET comm protocol, both sending and receiving
 #include "can_manager.h"
 
 // Array of strings corresponding to the enum values, for printing debug information. Make sure to keep this in sync with the enum.
-const char* STATESEnumStrings[] = {
+const char *STATESEnumStrings[] = {
     "IDLE",
     "GET_COMMAND",
     "BUILD_CAN_FRAME",
@@ -22,8 +22,7 @@ const char* STATESEnumStrings[] = {
     "SET_SINGLEWIRE_MODE",
     "SET_SYSTYPE",
     "ECHO_CAN_FRAME",
-    "SETUP_EXT_BUSES"
-};
+    "SETUP_EXT_BUSES"};
 
 GVRET_Comm_Handler::GVRET_Comm_Handler()
 {
@@ -31,7 +30,7 @@ GVRET_Comm_Handler::GVRET_Comm_Handler()
     state = IDLE;
 }
 
-void GVRET_Comm_Handler::processIncomingByte(uint8_t in_byte)
+inline void GVRET_Comm_Handler::processIncomingByte(uint8_t in_byte)
 {
     uint32_t busSpeed = 0;
     uint32_t now = micros();
@@ -41,7 +40,7 @@ void GVRET_Comm_Handler::processIncomingByte(uint8_t in_byte)
 
     DEBUG("in_byte == 0x%02X, current State == %s\n", in_byte, STATESEnumStrings[state]);
     switch (state)
-    {        
+    {
     case IDLE:
         DEBUG("Case IDLE\n");
         if (in_byte == 0xE7)
@@ -563,7 +562,7 @@ void GVRET_Comm_Handler::processIncomingByte(uint8_t in_byte)
     }
 }
 
-void GVRET_Comm_Handler::processIncomingBuffer(uint8_t* data, size_t len)
+void GVRET_Comm_Handler::processIncomingBuffer(uint8_t *data, size_t len)
 {
     for (size_t i = 0; i < len; i++)
         processIncomingByte(data[i]);

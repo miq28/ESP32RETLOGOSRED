@@ -44,18 +44,18 @@ void GVRET_Comm_Handler::processIncomingByte(uint8_t in_byte)
     {        
     case IDLE:
         DEBUG("Case IDLE\n");
-        if (in_byte == 0xF1)
-        {
-            DEBUG(" change state to GET_COMMAND\n");
-            state = GET_COMMAND;
-        }
-        else if (in_byte == 0xE7)
+        if (in_byte == 0xE7)
         {
             DEBUG(" set settings.useBinarySerialComm = true\n");
             DEBUG(" set settings.lawicelMode = false\n");
             settings.useBinarySerialComm = true;
             SysSettings.lawicelMode = false;
             // setPromiscuousMode(); //going into binary comm will set promisc. mode too.
+        }
+        else if (in_byte == 0xF1)
+        {
+            DEBUG(" change state to GET_COMMAND\n");
+            state = GET_COMMAND;
         }
         else
         {
@@ -561,6 +561,12 @@ void GVRET_Comm_Handler::processIncomingByte(uint8_t in_byte)
         step++;
         break;
     }
+}
+
+void GVRET_Comm_Handler::processIncomingBuffer(uint8_t* data, size_t len)
+{
+    for (size_t i = 0; i < len; i++)
+        processIncomingByte(data[i]);
 }
 
 // Get the value of XOR'ing all the bytes together. This creates a reasonable checksum that can be used

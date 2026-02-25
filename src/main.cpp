@@ -39,6 +39,92 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "USB.h"
 
+#pragma once
+
+template <size_t SIZE>
+class FastRingBuffer
+{
+private:
+    static_assert((SIZE & (SIZE - 1)) == 0, "SIZE must be power of 2");
+
+    uint8_t buffer[SIZE];
+    volatile size_t head = 0;
+    volatile size_t tail = 0;
+
+public:
+    inline size_t available() const
+    {
+        return (head - tail) & (SIZE - 1);
+    }
+
+    inline size_t freeSpace() const
+    {
+        return (SIZE - 1) - available();
+    }
+
+    inline bool push(uint8_t data)
+    {
+        size_t next = (head + 1) & (SIZE - 1);
+        if (next == tail)
+            return false; // full
+
+        buffer[head] = data;
+        head = next;
+        return true;
+    }
+
+    inline size_t push(const uint8_t *data, size_t len)
+    {
+        size_t pushed = 0;
+
+        while (pushed < len)
+        {
+            size_t next = (head + 1) & (SIZE - 1);
+            if (next == tail)
+                break; // full
+
+            buffer[head] = data[pushed++];
+            head = next;
+        }
+        return pushed;
+    }
+
+    inline size_t pop(uint8_t *out, size_t maxLen)
+    {
+        size_t count = 0;
+
+        while ((tail != head) && (count < maxLen))
+        {
+            out[count++] = buffer[tail];
+            tail = (tail + 1) & (SIZE - 1);
+        }
+
+        return count;
+    }
+};
+
+FastRingBuffer<2048> txBuffer;
+
+void handleSerialTx()
+{
+    uint8_t temp[256];
+
+    size_t space = Serial.availableForWrite();
+    if (space == 0)
+        return;
+
+    size_t toSend = min(space, sizeof(temp));
+    size_t count = txBuffer.pop(temp, toSend);
+
+    if (count > 0)
+        Serial.write(temp, count);
+}
+
+void onCanFrame(uint8_t *data, size_t len)
+{
+    txBuffer.push(data, len); // non-blocking
+}
+
 byte i = 0;
 
 uint32_t lastFlushMicros = 0;
@@ -106,7 +192,6 @@ void loadSettings()
 #else
         CAN0.setCANPins(GPIO_NUM_26, GPIO_NUM_27);
 #endif
-
     }
 
     if (nvPrefs.getString("SSID", settings.SSID, 32) == 0)
@@ -170,12 +255,21 @@ void setup()
 {
     espChipRevision = ESP.getChipRevision();
 
+    // DEBUGPORT.setTxBufferSize(1024);
+
 #ifdef CONFIG_IDF_TARGET_ESP32S3
     // Serial.begin(1000000);
+    Serial.setTxBufferSize(1024);
     Serial.begin(115200);
+    DEBUGPORT.setTxBufferSize(1024);
     DEBUGPORT.begin(115200);
+    DEBUGPORT.print("Reset reason: ");
+    DEBUGPORT.println(esp_reset_reason());
 #else
-    DEBUGPORT.begin(115200);
+    DEBUGPORT.setTxBufferSize(1024);
+    DEBUGPORT.begin(1000000);
+    DEBUGPORT.print("Reset reason: ");
+    DEBUGPORT.println(esp_reset_reason());
 #endif
 
     SysSettings.isWifiConnected = false;
@@ -241,8 +335,12 @@ void loop()
         lastFlushMicros = micros();
         if (serialLength > 0)
         {
-            Serial.write(serialGVRET.getBufferedBytes(), serialLength);
+            // Serial.write(serialGVRET.getBufferedBytes(), serialLength);
             // Serial.write('\n');
+            onCanFrame(serialGVRET.getBufferedBytes(), serialLength);
+            handleSerialTx();
+
+            wifiManager.sendBufferedData();
             serialGVRET.clearBufferedBytes();
         }
         if (wifiLength > 0)

@@ -48,6 +48,7 @@ class GVRET_Comm_Handler: public CommBuffer
 public:
     GVRET_Comm_Handler();
     void processIncomingByte(uint8_t in_byte);
+    void processIncomingBuffer(uint8_t* data, size_t len);
     
 private:
     CAN_FRAME build_out_frame;

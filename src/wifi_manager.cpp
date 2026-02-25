@@ -205,76 +205,72 @@ void onClientDisconnect(ClientDisconnectHandler handler)
    SERVER HANDLER _ REJECT NEW CLIENT IF ALL SLOTS FULL (MORE COMPLEX IMPLEMENTATION)
 ========================= */
 
+static uint8_t rxBuffer[1460];
+static WiFiClient clientPool[MAX_CLIENTS];     // actual storage
+static WiFiClient* activeClients[MAX_CLIENTS]; // pointers to active ones
+static int activeCount = 0;
+
 void handleServerRejectMode()
 {
-    // =========================
-    // ACCEPT NEW CLIENT
-    // =========================
     WiFiClient newClient = wifiServer.accept();
+
     if (newClient)
     {
-        bool slotFound = false;
-
-        for (int i = 0; i < MAX_CLIENTS; i++)
+        if (activeCount >= MAX_CLIENTS)
         {
-            if (!SysSettings.clientNodes[i] ||
-                !SysSettings.clientNodes[i].connected())
-            {
-                SysSettings.clientNodes[i] = newClient;
-                clientState[i] = true;
-
-                if (onConnectHandler)
-                    onConnectHandler(i, SysSettings.clientNodes[i]);
-
-                slotFound = true;
-                break;
-            }
-        }
-
-        if (!slotFound)
-        {
-            Serial.println("Server full. Rejecting client.");
             newClient.println("Server Busy");
             newClient.stop();
         }
+        else
+        {
+            for (int i = 0; i < MAX_CLIENTS; i++)
+            {
+                if (!clientPool[i] || !clientPool[i].connected())
+                {
+                    clientPool[i] = newClient;
+                    activeClients[activeCount++] = &clientPool[i];
+
+                    if (onConnectHandler)
+                        onConnectHandler(i, clientPool[i]);
+
+                    break;
+                }
+            }
+        }
     }
 
-    // =========================
-    // HANDLE CLIENTS
-    // =========================
-    for (int i = 0; i < MAX_CLIENTS; i++)
+    // ===== HANDLE ACTIVE CLIENTS ONLY =====
+    for (int a = 0; a < activeCount; )
     {
-        if (clientState[i] &&
-            SysSettings.clientNodes[i] &&
-            SysSettings.clientNodes[i].connected())
+        WiFiClient* client = activeClients[a];
+
+        if (!(*client) || !client->connected())
         {
-            // -------- READ BYTES --------
-            while (SysSettings.clientNodes[i].available())
-            {
-                uint8_t inByt =
-                    SysSettings.clientNodes[i].read();
-
-                SysSettings.isWifiActive = true;
-
-                wifiGVRET.processIncomingByte(inByt);
-            }
-
-            // Force TCP state refresh
-            SysSettings.clientNodes[i].peek();
-        }
-
-        // -------- DISCONNECT CHECK --------
-        if (clientState[i] &&
-            (!SysSettings.clientNodes[i] ||
-             !SysSettings.clientNodes[i].connected()))
-        {
-            clientState[i] = false;
-
             if (onDisconnectHandler)
-                onDisconnectHandler(i, SysSettings.clientNodes[i]);
+                onDisconnectHandler(-1, *client);
 
-            SysSettings.clientNodes[i].stop();
+            client->stop();
+
+            activeClients[a] = activeClients[--activeCount];
+            continue;
         }
+
+        // -------- BATCH READ --------
+        int availableBytes = client->available();
+
+        if (availableBytes > 0)
+        {
+            int readLen = min(availableBytes, (int)sizeof(rxBuffer));
+            int actual = client->read(rxBuffer, readLen);
+
+            if (actual > 0)
+            {
+                SysSettings.isWifiActive = true;
+                wifiGVRET.processIncomingBuffer(rxBuffer, actual);
+            }
+        }
+
+        a++;
     }
 }
 
@@ -331,7 +327,10 @@ void WiFiManager::setup()
         // WiFi.removeEvent(eventID);
 
         WiFi.mode(WIFI_STA);
-        WiFi.setSleep(true); // sleeping could cause delays
+        WiFi.setSleep(false); // disable power save
+        WiFi.setTxPower(WIFI_POWER_19_5dBm);
+        wifiServer.setNoDelay(true);
+        // esp_wifi_set_ps(WIFI_PS_NONE);
         WiFi.begin((const char *)settings.SSID, (const char *)settings.WPA2Key);
 
         Serial.println();
@@ -494,15 +493,34 @@ void WiFiManager::loop()
 
 void WiFiManager::sendBufferedData()
 {
-    for (int i = 0; i < MAX_CLIENTS; i++)
+    size_t len = wifiGVRET.numAvailableBytes();
+    if (len == 0) return;
+
+    uint8_t* buff = wifiGVRET.getBufferedBytes();
+
+    for (int a = 0; a < activeCount; )
     {
-        size_t wifiLength = wifiGVRET.numAvailableBytes();
-        uint8_t *buff = wifiGVRET.getBufferedBytes();
-        if (SysSettings.clientNodes[i] && SysSettings.clientNodes[i].connected())
+        WiFiClient* client = activeClients[a];
+
+        if (!client->connected())
         {
-            SysSettings.clientNodes[i].write(buff, wifiLength);
+            client->stop();
+            activeClients[a] = activeClients[--activeCount];
+            continue;
         }
+
+        size_t written = client->write(buff, len);
+
+        if (written == 0)  // write failed
+        {
+            client->stop();
+            activeClients[a] = activeClients[--activeCount];
+            continue;
+        }
+
+        a++;
     }
+
     wifiGVRET.clearBufferedBytes();
 }
 

@@ -17,7 +17,7 @@ void CommBuffer::clearBufferedBytes()
     transmitBufferLength = 0;
 }
 
-uint8_t* CommBuffer::getBufferedBytes()
+uint8_t *CommBuffer::getBufferedBytes()
 {
     return transmitBuffer;
 }
@@ -33,7 +33,8 @@ static inline bool hasSpace(size_t current, size_t add)
 
 void CommBuffer::sendBytesToBuffer(uint8_t *bytes, size_t length)
 {
-    if (!hasSpace(transmitBufferLength, length)) return;
+    if (!hasSpace(transmitBufferLength, length))
+        return;
 
     memcpy(&transmitBuffer[transmitBufferLength], bytes, length);
     transmitBufferLength += length;
@@ -41,20 +42,22 @@ void CommBuffer::sendBytesToBuffer(uint8_t *bytes, size_t length)
 
 void CommBuffer::sendByteToBuffer(uint8_t byt)
 {
-    if (!hasSpace(transmitBufferLength, 1)) return;
+    if (!hasSpace(transmitBufferLength, 1))
+        return;
 
     transmitBuffer[transmitBufferLength++] = byt;
 }
 
 void CommBuffer::sendString(String str)
 {
-    sendCharString((char*)str.c_str());
+    sendCharString((char *)str.c_str());
 }
 
 void CommBuffer::sendCharString(char *str)
 {
     size_t len = strlen(str);
-    if (!hasSpace(transmitBufferLength, len)) return;
+    if (!hasSpace(transmitBufferLength, len))
+        return;
 
     memcpy(&transmitBuffer[transmitBufferLength], str, len);
     transmitBufferLength += len;
@@ -78,15 +81,21 @@ void CommBuffer::sendFrameToBuffer(CAN_FRAME &frame, int whichBus)
 
         size_t required = 1 + 1 + 4 + 4 + 1 + frame.length + 1;
 
-        if (!hasSpace(transmitBufferLength, required)) return;
+        while (!hasSpace(transmitBufferLength, required))
+        {
+            // Wait until main loop flushes buffer
+            delayMicroseconds(50);
+        }
 
-        uint8_t* p = &transmitBuffer[transmitBufferLength];
+        uint8_t *p = &transmitBuffer[transmitBufferLength];
 
         *p++ = 0xF1;
         *p++ = 0;
 
-        memcpy(p, &now, 4); p += 4;
-        memcpy(p, &id, 4);  p += 4;
+        memcpy(p, &now, 4);
+        p += 4;
+        memcpy(p, &id, 4);
+        p += 4;
 
         *p++ = frame.length + (whichBus << 4);
 
@@ -100,29 +109,29 @@ void CommBuffer::sendFrameToBuffer(CAN_FRAME &frame, int whichBus)
     else
     {
         int written = snprintf(
-            (char*)&transmitBuffer[transmitBufferLength],
+            (char *)&transmitBuffer[transmitBufferLength],
             WIFI_BUFF_SIZE - transmitBufferLength,
             "%lu - %lx %c %d %d",
             now,
             id,
             frame.extended ? 'X' : 'S',
             whichBus,
-            frame.length
-        );
+            frame.length);
 
-        if (written <= 0) return;
+        if (written <= 0)
+            return;
         transmitBufferLength += written;
 
         for (int i = 0; i < frame.length; i++)
         {
             written = snprintf(
-                (char*)&transmitBuffer[transmitBufferLength],
+                (char *)&transmitBuffer[transmitBufferLength],
                 WIFI_BUFF_SIZE - transmitBufferLength,
                 " %x",
-                frame.data.uint8[i]
-            );
+                frame.data.uint8[i]);
 
-            if (written <= 0) return;
+            if (written <= 0)
+                return;
             transmitBufferLength += written;
         }
 
@@ -150,15 +159,21 @@ void CommBuffer::sendFrameToBuffer(CAN_FRAME_FD &frame, int whichBus)
 
         size_t required = 1 + 1 + 4 + 4 + 1 + 1 + frame.length + 1;
 
-        if (!hasSpace(transmitBufferLength, required)) return;
+        while (!hasSpace(transmitBufferLength, required))
+        {
+            // Wait until main loop flushes buffer
+            delayMicroseconds(50);
+        }
 
-        uint8_t* p = &transmitBuffer[transmitBufferLength];
+        uint8_t *p = &transmitBuffer[transmitBufferLength];
 
         *p++ = 0xF1;
         *p++ = PROTO_BUILD_FD_FRAME;
 
-        memcpy(p, &now, 4); p += 4;
-        memcpy(p, &id, 4);  p += 4;
+        memcpy(p, &now, 4);
+        p += 4;
+        memcpy(p, &id, 4);
+        p += 4;
 
         *p++ = frame.length;
         *p++ = (uint8_t)whichBus;
@@ -173,29 +188,29 @@ void CommBuffer::sendFrameToBuffer(CAN_FRAME_FD &frame, int whichBus)
     else
     {
         int written = snprintf(
-            (char*)&transmitBuffer[transmitBufferLength],
+            (char *)&transmitBuffer[transmitBufferLength],
             WIFI_BUFF_SIZE - transmitBufferLength,
             "%lu - %lx %c %d %d",
             now,
             id,
             frame.extended ? 'X' : 'S',
             whichBus,
-            frame.length
-        );
+            frame.length);
 
-        if (written <= 0) return;
+        if (written <= 0)
+            return;
         transmitBufferLength += written;
 
         for (int i = 0; i < frame.length; i++)
         {
             written = snprintf(
-                (char*)&transmitBuffer[transmitBufferLength],
+                (char *)&transmitBuffer[transmitBufferLength],
                 WIFI_BUFF_SIZE - transmitBufferLength,
                 " %x",
-                frame.data.uint8[i]
-            );
+                frame.data.uint8[i]);
 
-            if (written <= 0) return;
+            if (written <= 0)
+                return;
             transmitBufferLength += written;
         }
 

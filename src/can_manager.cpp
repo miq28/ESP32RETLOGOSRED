@@ -13,14 +13,17 @@ CANManager::CANManager()
 
 void CANManager::setup()
 {
+    Serial.println("Entering CANManager::setup()");
     for (int i = 0; i < SysSettings.numBuses; i++)
     {
+        Serial.printf("Bus %d start\n", i);
         if (settings.canSettings[i].enabled)
         {
-            canBuses[i]->enable();
+            // canBuses[i]->enable();
             if ((settings.canSettings[i].fdMode == 0) || !canBuses[i]->supportsFDMode())
             {
                 canBuses[i]->begin(settings.canSettings[i].nomSpeed, 255);
+                Serial.println("Begin done");
                 Serial.printf("Enabled CAN%u with speed %u\n", i, settings.canSettings[i].nomSpeed);
                 if ((i == 0) && (settings.systemType == 2))
                 {
@@ -43,10 +46,12 @@ void CANManager::setup()
             if (settings.canSettings[i].listenOnly)
             {
                 canBuses[i]->setListenOnlyMode(true);
+                Serial.println("ListenOnly set true done");
             }
             else
             {
                 canBuses[i]->setListenOnlyMode(false);
+                Serial.println("ListenOnly set false done");
             }
             canBuses[i]->watchFor();
         }

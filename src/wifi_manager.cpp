@@ -207,7 +207,7 @@ void onClientDisconnect(ClientDisconnectHandler handler)
 
 static uint8_t rxBuffer[1460];
 static WiFiClient clientPool[MAX_CLIENTS];     // actual storage
-static WiFiClient* activeClients[MAX_CLIENTS]; // pointers to active ones
+static WiFiClient *activeClients[MAX_CLIENTS]; // pointers to active ones
 static int activeCount = 0;
 
 void handleServerRejectMode()
@@ -240,9 +240,9 @@ void handleServerRejectMode()
     }
 
     // ===== HANDLE ACTIVE CLIENTS ONLY =====
-    for (int a = 0; a < activeCount; )
+    for (int a = 0; a < activeCount;)
     {
-        WiFiClient* client = activeClients[a];
+        WiFiClient *client = activeClients[a];
 
         if (!(*client) || !client->connected())
         {
@@ -494,14 +494,15 @@ void WiFiManager::loop()
 void WiFiManager::sendBufferedData()
 {
     size_t len = wifiGVRET.numAvailableBytes();
-    if (len == 0) return;
+    if (len == 0)
+        return;
 
-    uint8_t* data = wifiGVRET.getBufferedBytes();
+    uint8_t *data = wifiGVRET.getBufferedBytes();
     size_t remaining = len;
 
-    for (int a = 0; a < activeCount; )
+    for (int a = 0; a < activeCount;)
     {
-        WiFiClient* client = activeClients[a];
+        WiFiClient *client = activeClients[a];
 
         if (!client->connected())
         {
@@ -513,11 +514,17 @@ void WiFiManager::sendBufferedData()
         while (remaining > 0)
         {
             size_t written = client->write(data, remaining);
+
             if (written == 0)
+            {
+                delay(0); // yield to WiFi task
                 break;
+            }
 
             data += written;
             remaining -= written;
+
+            delay(0); // feed watchdog + allow WiFi stack
         }
 
         a++;

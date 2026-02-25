@@ -39,6 +39,30 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "USB.h"
 
+extern CANManager canManager;
+
+void canDrainTask(void *arg)
+{
+    CAN_FRAME frame;
+
+    const int MAX_FRAMES_PER_SLICE = 32;
+
+    while (true)
+    {
+        int processed = 0;
+
+        while (CAN0.available() > 0 &&
+               processed < MAX_FRAMES_PER_SLICE)
+        {
+            CAN0.read(frame);
+            canManager.displayFrame(frame, 0);
+            processed++;
+        }
+
+        vTaskDelay(1);   // feed watchdog + scheduler
+    }
+}
+
 template <size_t SIZE>
 class FastRingBuffer
 {
@@ -264,10 +288,10 @@ void setup()
     DEBUGPORT.print("Reset reason: ");
     DEBUGPORT.println(esp_reset_reason());
 #else
-    DEBUGPORT.setTxBufferSize(1024);
-    DEBUGPORT.begin(1000000);
-    DEBUGPORT.print("Reset reason: ");
-    DEBUGPORT.println(esp_reset_reason());
+    Serial.setTxBufferSize(1024);
+    Serial.begin(1000000);
+    Serial.print("Reset reason: ");
+    Serial.println(esp_reset_reason());
 #endif
 
     SysSettings.isWifiConnected = false;
@@ -292,7 +316,19 @@ void setup()
     Serial.println("=====================================");
     Serial.println("");
 
+    Serial.println("Before canManager.setup()");
     canManager.setup();
+    Serial.println("After canManager.setup()");
+
+    xTaskCreatePinnedToCore(
+        canDrainTask,
+        "CANDrain",
+        4096,
+        NULL,
+        18,
+        NULL,
+        0
+    );
 
     SysSettings.lawicelMode = false;
     SysSettings.lawicelAutoPoll = false;
@@ -321,14 +357,31 @@ void loop()
     if (SysSettings.lawicelPollCounter > 0)
         SysSettings.lawicelPollCounter--;
 
-    canManager.loop();
+    static uint32_t lastPrint = 0;
+
+    if (millis() - lastPrint > 1000)
+    {
+        lastPrint = millis();
+
+        Serial.printf(
+            "avail=%u overflow=%u\n",
+            CAN0.available(),
+            CAN0.getOverflowCount());
+    }
+
+    // while (CAN0.available() > 0)
+    // {
+    //     canManager.loop();
+    // }
+
     wifiManager.loop();
 
     size_t wifiLength = wifiGVRET.numAvailableBytes();
     size_t serialLength = serialGVRET.numAvailableBytes();
     size_t maxLength = (wifiLength > serialLength) ? wifiLength : serialLength;
 
-    if ((micros() - lastFlushMicros > SER_BUFF_FLUSH_INTERVAL) || (maxLength > (WIFI_BUFF_SIZE - 40)))
+    if (serialLength > 0)
+        DEBUG("Serial buffer has %i bytes\n", serialLength);
     {
         lastFlushMicros = micros();
         if (serialLength > 0)
@@ -340,16 +393,24 @@ void loop()
             {
                 size_t space = Serial.availableForWrite();
                 if (space == 0)
+                {
+                    delay(0);
                     break;
+                }
 
                 size_t chunk = remaining > space ? space : remaining;
                 size_t written = Serial.write(data, chunk);
 
                 if (written == 0)
+                {
+                    delay(0);
                     break;
+                }
 
                 data += written;
                 remaining -= written;
+
+                delay(0);
             }
 
             if (remaining == 0)

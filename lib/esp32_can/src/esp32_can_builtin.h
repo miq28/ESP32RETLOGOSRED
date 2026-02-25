@@ -1,14 +1,14 @@
 /*
   MCP2515.h - Library for Microchip MCP2515 CAN Controller
-  
+
   Author: David Harding
   Maintainer: RechargeCar Inc (http://rechargecar.com)
   Further Modification: Collin Kidder
-  
+
   Created: 11/08/2010
-  
+
   For further information see:
-  
+
   http://ww1.microchip.com/downloads/en/DeviceDoc/21801e.pdf
   http://en.wikipedia.org/wiki/CAN_bus
 
@@ -44,11 +44,25 @@
 #include <string.h>
 #include <sstream>
 
-//#define DEBUG_SETUP
+// #define DEBUG_SETUP
 #define BI_NUM_FILTERS 32
 
-#define BI_RX_BUFFER_SIZE	64
-#define BI_TX_BUFFER_SIZE  16
+#define BI_RX_BUFFER_SIZE 64
+#define BI_TX_BUFFER_SIZE 16
+
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+#define RX_RING_SIZE 512
+#else
+#define RX_RING_SIZE 128 // this is the size of the ring buffer used to store received messages. It should be at least as large as the TWAI driver's RX queue size to avoid losing messages. The default TWAI driver RX queue size is 6, so this should be plenty big enough for most applications. If you are getting RX overflow errors, you may want to increase this size.
+#endif
+#define RX_RING_MASK (RX_RING_SIZE - 1)
+
+struct RxRing
+{
+  volatile uint32_t head;
+  volatile uint32_t tail;
+  CAN_FRAME buffer[RX_RING_SIZE];
+};
 
 typedef struct
 {
@@ -60,8 +74,8 @@ typedef struct
 
 typedef struct
 {
-    twai_timing_config_t cfg;
-    uint32_t speed;
+  twai_timing_config_t cfg;
+  uint32_t speed;
 } VALID_TIMING;
 
 class ESP32CAN : public CAN_COMMON
@@ -70,7 +84,7 @@ public:
   ESP32CAN(gpio_num_t rxPin, gpio_num_t txPin, uint8_t busNumber = 0);
   ESP32CAN();
 
-  //block of functions which must be overriden from CAN_COMMON to implement functionality for this hardware
+  // block of functions which must be overriden from CAN_COMMON to implement functionality for this hardware
   int _setFilterSpecific(uint8_t mailbox, uint32_t id, uint32_t mask, bool extended);
   int _setFilter(uint32_t id, uint32_t mask, bool extended);
   void _init();
@@ -81,27 +95,29 @@ public:
   void setNoACKMode(bool state);
   void enable();
   void disable();
-  bool sendFrame(CAN_FRAME& txFrame);
+  bool sendFrame(CAN_FRAME &txFrame);
   bool rx_avail();
   void setTXBufferSize(int newSize);
   void setRXBufferSize(int newSize);
-  uint16_t available(); //like rx_avail but returns the number of waiting frames
+  uint16_t available(); // like rx_avail but returns the number of waiting frames
   uint32_t get_rx_buff(CAN_FRAME &msg);
   bool processFrame(twai_message_t &frame);
   void sendCallback(CAN_FRAME *frame);
 
   void setCANPins(gpio_num_t rxPin, gpio_num_t txPin);
 
-  static void CAN_WatchDog_Builtin( void *pvParameters );
+  static void CAN_WatchDog_Builtin(void *pvParameters);
 
-  #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0)
-    twai_handle_t bus_handle;
-  #endif
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0)
+  twai_handle_t bus_handle;
+#endif
+
+  uint32_t getOverflowCount();
 
 protected:
   bool readyForTraffic;
   int cyclesSinceTraffic;
-                                                                      //tx,         rx,           mode
+  // tx,         rx,           mode
   twai_general_config_t twai_general_cfg = TWAI_GENERAL_CONFIG_DEFAULT(GPIO_NUM_17, GPIO_NUM_16, TWAI_MODE_NORMAL);
   twai_timing_config_t twai_speed_cfg = TWAI_TIMING_CONFIG_500KBITS();
   twai_filter_config_t twai_filters_cfg = TWAI_FILTER_CONFIG_ACCEPT_ALL();
@@ -120,6 +136,16 @@ private:
 
   static void task_CAN(void *pvParameters);
   static void task_LowLevelRX(void *pvParameters);
+
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+  RxRing rxRing;
+#else
+  RxRing *rxRing;
+#endif
+
+  volatile uint32_t rxOverflow;
+
+  TaskHandle_t rxTaskHandle;
 };
 
 extern QueueHandle_t callbackQueue;

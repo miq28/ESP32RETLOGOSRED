@@ -78,22 +78,22 @@ inline void GVRET_Comm_Handler::processIncomingByte(uint8_t in_byte)
             DEBUG(" change state to TIME_SYNC\n");
             state = TIME_SYNC;
             step = 0;
-            transmitBuffer[transmitBufferLength++] = 0xF1;
-            transmitBuffer[transmitBufferLength++] = 1; // time sync
-            transmitBuffer[transmitBufferLength++] = (uint8_t)(now & 0xFF);
-            transmitBuffer[transmitBufferLength++] = (uint8_t)(now >> 8);
-            transmitBuffer[transmitBufferLength++] = (uint8_t)(now >> 16);
-            transmitBuffer[transmitBufferLength++] = (uint8_t)(now >> 24);
+            sendByteToBuffer(0xF1) ;
+            sendByteToBuffer(1) ; // time sync
+            sendByteToBuffer((uint8_t)(now & 0xFF));
+            sendByteToBuffer((uint8_t)(now >> 8));
+            sendByteToBuffer((uint8_t)(now >> 16));
+            sendByteToBuffer((uint8_t)(now >> 24));
             break;
         case PROTO_DIG_INPUTS:
             DEBUG("Case PROTO_DIG_INPUTS\n");
             // immediately return the data for digital inputs
             temp8 = 0; // getDigital(0) + (getDigital(1) << 1) + (getDigital(2) << 2) + (getDigital(3) << 3) + (getDigital(4) << 4) + (getDigital(5) << 5);
-            transmitBuffer[transmitBufferLength++] = 0xF1;
-            transmitBuffer[transmitBufferLength++] = 2; // digital inputs
-            transmitBuffer[transmitBufferLength++] = temp8;
+            sendByteToBuffer(0xF1);
+            sendByteToBuffer(2); // digital inputs
+            sendByteToBuffer(temp8);
             temp8 = checksumCalc(buff, 2);
-            transmitBuffer[transmitBufferLength++] = temp8;
+            sendByteToBuffer(temp8);
             DEBUG(" change state to IDLE\n");
             state = IDLE;
             break;
@@ -101,30 +101,30 @@ inline void GVRET_Comm_Handler::processIncomingByte(uint8_t in_byte)
             DEBUG("Case PROTO_ANA_INPUTS\n");
             // immediately return data on analog inputs
             temp16 = 0; // getAnalog(0);  // Analogue input 1
-            transmitBuffer[transmitBufferLength++] = 0xF1;
-            transmitBuffer[transmitBufferLength++] = 3;
-            transmitBuffer[transmitBufferLength++] = temp16 & 0xFF;
-            transmitBuffer[transmitBufferLength++] = uint8_t(temp16 >> 8);
+            sendByteToBuffer(0xF1);
+            sendByteToBuffer(3); // number of analog inputs
+            sendByteToBuffer(temp16 & 0xFF);
+            sendByteToBuffer(uint8_t(temp16 >> 8));
             temp16 = 0; // getAnalog(1);  // Analogue input 2
-            transmitBuffer[transmitBufferLength++] = temp16 & 0xFF;
-            transmitBuffer[transmitBufferLength++] = uint8_t(temp16 >> 8);
+            sendByteToBuffer(temp16 & 0xFF);
+            sendByteToBuffer(uint8_t(temp16 >> 8));
             temp16 = 0; // getAnalog(2);  // Analogue input 3
-            transmitBuffer[transmitBufferLength++] = temp16 & 0xFF;
-            transmitBuffer[transmitBufferLength++] = uint8_t(temp16 >> 8);
+            sendByteToBuffer(temp16 & 0xFF);
+            sendByteToBuffer(uint8_t(temp16 >> 8));
             temp16 = 0; // getAnalog(3);  // Analogue input 4
-            transmitBuffer[transmitBufferLength++] = temp16 & 0xFF;
-            transmitBuffer[transmitBufferLength++] = uint8_t(temp16 >> 8);
+            sendByteToBuffer(temp16 & 0xFF);
+            sendByteToBuffer(uint8_t(temp16 >> 8));
             temp16 = 0; // getAnalog(4);  // Analogue input 5
-            transmitBuffer[transmitBufferLength++] = temp16 & 0xFF;
-            transmitBuffer[transmitBufferLength++] = uint8_t(temp16 >> 8);
+            sendByteToBuffer(temp16 & 0xFF);
+            sendByteToBuffer(uint8_t(temp16 >> 8));
             temp16 = 0; // getAnalog(5);  // Analogue input 6
-            transmitBuffer[transmitBufferLength++] = temp16 & 0xFF;
-            transmitBuffer[transmitBufferLength++] = uint8_t(temp16 >> 8);
+            sendByteToBuffer(temp16 & 0xFF);
+            sendByteToBuffer(uint8_t(temp16 >> 8));
             temp16 = 0; // getAnalog(6);  // Vehicle Volts
-            transmitBuffer[transmitBufferLength++] = temp16 & 0xFF;
-            transmitBuffer[transmitBufferLength++] = uint8_t(temp16 >> 8);
+            sendByteToBuffer(temp16 & 0xFF);
+            sendByteToBuffer(uint8_t(temp16 >> 8));
             temp8 = checksumCalc(buff, 9);
-            transmitBuffer[transmitBufferLength++] = temp8;
+            sendByteToBuffer(temp8);
             DEBUG(" change state to IDLE\n");
             state = IDLE;
             break;
@@ -144,32 +144,32 @@ inline void GVRET_Comm_Handler::processIncomingByte(uint8_t in_byte)
         case PROTO_GET_CANBUS_PARAMS:
             DEBUG("Case PROTO_GET_CANBUS_PARAMS\n");
             // immediately return data on canbus params
-            transmitBuffer[transmitBufferLength++] = 0xF1;
-            transmitBuffer[transmitBufferLength++] = 6;
-            transmitBuffer[transmitBufferLength++] = settings.canSettings[0].enabled + ((unsigned char)settings.canSettings[0].listenOnly << 4);
-            transmitBuffer[transmitBufferLength++] = settings.canSettings[0].nomSpeed;
-            transmitBuffer[transmitBufferLength++] = settings.canSettings[0].nomSpeed >> 8;
-            transmitBuffer[transmitBufferLength++] = settings.canSettings[0].nomSpeed >> 16;
-            transmitBuffer[transmitBufferLength++] = settings.canSettings[0].nomSpeed >> 24;
-            transmitBuffer[transmitBufferLength++] = settings.canSettings[1].enabled + ((unsigned char)settings.canSettings[1].listenOnly << 4);
-            transmitBuffer[transmitBufferLength++] = settings.canSettings[1].nomSpeed;
-            transmitBuffer[transmitBufferLength++] = settings.canSettings[1].nomSpeed >> 8;
-            transmitBuffer[transmitBufferLength++] = settings.canSettings[1].nomSpeed >> 16;
-            transmitBuffer[transmitBufferLength++] = settings.canSettings[1].nomSpeed >> 24;
+            sendByteToBuffer(0xF1);
+            sendByteToBuffer(6); // number of bytes in response
+            sendByteToBuffer(settings.canSettings[0].enabled + ((unsigned char)settings.canSettings[0].listenOnly << 4));
+            sendByteToBuffer(settings.canSettings[0].nomSpeed & 0xFF);
+            sendByteToBuffer(uint8_t(settings.canSettings[0].nomSpeed >> 8));
+            sendByteToBuffer(uint8_t(settings.canSettings[0].nomSpeed >> 16));
+            sendByteToBuffer(uint8_t(settings.canSettings[0].nomSpeed >> 24));
+            sendByteToBuffer(settings.canSettings[1].enabled + ((unsigned char)settings.canSettings[1].listenOnly << 4));
+            sendByteToBuffer(settings.canSettings[1].nomSpeed & 0xFF);
+            sendByteToBuffer(uint8_t(settings.canSettings[1].nomSpeed >> 8));
+            sendByteToBuffer(uint8_t(settings.canSettings[1].nomSpeed >> 16));
+            sendByteToBuffer(uint8_t(settings.canSettings[1].nomSpeed >> 24));
             DEBUG(" change state to IDLE\n");
             state = IDLE;
             break;
         case PROTO_GET_DEV_INFO:
             DEBUG("Case PROTO_GET_DEV_INFO\n");
             // immediately return device information
-            transmitBuffer[transmitBufferLength++] = 0xF1;
-            transmitBuffer[transmitBufferLength++] = 7;
-            transmitBuffer[transmitBufferLength++] = CFG_BUILD_NUM & 0xFF;
-            transmitBuffer[transmitBufferLength++] = (CFG_BUILD_NUM >> 8);
-            transmitBuffer[transmitBufferLength++] = 0x20;
-            transmitBuffer[transmitBufferLength++] = 0;
-            transmitBuffer[transmitBufferLength++] = 0;
-            transmitBuffer[transmitBufferLength++] = 0; // was single wire mode. Should be rethought for this board.
+            sendByteToBuffer(0xF1);
+            sendByteToBuffer(7); // number of bytes in response
+            sendByteToBuffer(CFG_BUILD_NUM & 0xFF);
+            sendByteToBuffer(uint8_t(CFG_BUILD_NUM >> 8));
+            sendByteToBuffer(0x20);
+            sendByteToBuffer(0);
+            sendByteToBuffer(0);
+            sendByteToBuffer(0); // was single wire mode. Should be rethought for this board.
             DEBUG(" change state to IDLE\n");
             state = IDLE;
             break;
@@ -181,10 +181,10 @@ inline void GVRET_Comm_Handler::processIncomingByte(uint8_t in_byte)
             break;
         case PROTO_KEEPALIVE:
             DEBUG("Case PROTO_KEEPALIVE\n");
-            transmitBuffer[transmitBufferLength++] = 0xF1;
-            transmitBuffer[transmitBufferLength++] = 0x09;
-            transmitBuffer[transmitBufferLength++] = 0xDE;
-            transmitBuffer[transmitBufferLength++] = 0xAD;
+            sendByteToBuffer(0xF1);
+            sendByteToBuffer(0x09);
+            sendByteToBuffer(0xDE);
+            sendByteToBuffer(0xAD);
             DEBUG(" change state to IDLE\n");
             state = IDLE;
             break;
@@ -204,18 +204,18 @@ inline void GVRET_Comm_Handler::processIncomingByte(uint8_t in_byte)
             break;
         case PROTO_GET_NUMBUSES:
             DEBUG("Case PROTO_GET_NUMBUSES\n");
-            transmitBuffer[transmitBufferLength++] = 0xF1;
-            transmitBuffer[transmitBufferLength++] = 12;
-            transmitBuffer[transmitBufferLength++] = SysSettings.numBuses;
+            sendByteToBuffer(0xF1);
+            sendByteToBuffer(12);
+            sendByteToBuffer(SysSettings.numBuses);
             DEBUG(" change state to IDLE\n");
             state = IDLE;
             break;
         case PROTO_GET_EXT_BUSES:
             DEBUG("Case PROTO_GET_EXT_BUSES\n");
-            transmitBuffer[transmitBufferLength++] = 0xF1;
-            transmitBuffer[transmitBufferLength++] = 13;
+            sendByteToBuffer(0xF1);
+            sendByteToBuffer(13);
             for (int u = 2; u < 17; u++)
-                transmitBuffer[transmitBufferLength++] = 0;
+                sendByteToBuffer(0); // this is a placeholder for up to 15 additional buses which could be added in the future. For now just return 0 for all of them.
             step = 0;
             DEBUG(" change state to IDLE\n");
             state = IDLE;

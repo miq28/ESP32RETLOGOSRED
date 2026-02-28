@@ -36,6 +36,26 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "gvret_comm.h"
 #include "can_manager.h"
 #include "lawicel.h"
+#include "esp_task_wdt.h"
+
+//Converts reason type to a C string.
+//Type is located in /tools/sdk/esp32/include/esp_system/include/esp_system.h
+const char *resetReasonName(esp_reset_reason_t r) {
+  switch (r) {
+    case ESP_RST_UNKNOWN:   return "Unknown";
+    case ESP_RST_POWERON:   return "PowerOn";    //Power on or RST pin toggled
+    case ESP_RST_EXT:       return "ExtPin";     //External pin - not applicable for ESP32
+    case ESP_RST_SW:        return "Reboot";     //esp_restart()
+    case ESP_RST_PANIC:     return "Crash";      //Exception/panic
+    case ESP_RST_INT_WDT:   return "WDT_Int";    //Interrupt watchdog (software or hardware)
+    case ESP_RST_TASK_WDT:  return "WDT_Task";   //Task watchdog
+    case ESP_RST_WDT:       return "WDT_Other";  //Other watchdog
+    case ESP_RST_DEEPSLEEP: return "Sleep";      //Reset after exiting deep sleep mode
+    case ESP_RST_BROWNOUT:  return "BrownOut";   //Brownout reset (software or hardware)
+    case ESP_RST_SDIO:      return "SDIO";       //Reset over SDIO
+    default:                return "";
+  }
+}
 
 byte i = 0;
 
@@ -99,7 +119,7 @@ void loadSettings()
         SysSettings.isWifiConnected = false;
         strcpy(otaHost, "");
         strcpy(otaFilename, "");
-        CAN0.setCANPins(GPIO_NUM_4, GPIO_NUM_5);
+        CAN0.setCANPins(GPIO_NUM_26, GPIO_NUM_27);
     }
 
     if (nvPrefs.getString("SSID", settings.SSID, 32) == 0)
@@ -163,8 +183,12 @@ void setup()
 {
     espChipRevision = ESP.getChipRevision();
 
-    // Serial.begin(1000000);
-    Serial.begin(115200);
+    SAVVYPORT.begin(1000000);
+    DEBUGPORT.begin(115200);
+
+    esp_reset_reason_t r = esp_reset_reason();
+    SAVVYPORT.printf("\r\nReset reason %i - %s\r\n\r\n", r, resetReasonName(r));
+    DEBUG("\r\nReset reason %i - %s\r\n\r\n", r, resetReasonName(r));
 
     SysSettings.isWifiConnected = false;
 
@@ -223,7 +247,6 @@ void loop()
     size_t wifiLength = wifiGVRET.numAvailableBytes();
     size_t serialLength = serialGVRET.numAvailableBytes();
     size_t maxLength = (wifiLength > serialLength) ? wifiLength : serialLength;
-    
 
     if ((micros() - lastFlushMicros > SER_BUFF_FLUSH_INTERVAL) || (maxLength > (WIFI_BUFF_SIZE - 40)))
     {

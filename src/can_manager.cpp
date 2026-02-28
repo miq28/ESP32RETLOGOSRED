@@ -9,8 +9,11 @@
 
 #define CAN_RING_SIZE 512 // increase if needed (RAM cost ~ 32KB)
 
-static void transportTask(void *arg);
+// void transportTask(void *arg);
+
 static volatile uint32_t ringOverflowCount = 0;
+
+// void canRxTask(void *arg);
 
 struct RingItem
 {
@@ -64,23 +67,23 @@ void CANManager::setup()
             if ((settings.canSettings[i].fdMode == 0) || !canBuses[i]->supportsFDMode())
             {
                 canBuses[i]->begin(settings.canSettings[i].nomSpeed, 255);
-                Serial.printf("Enabled CAN%u with speed %u\n", i, settings.canSettings[i].nomSpeed);
+                DEBUG("Enabled CAN%u with speed %u\n", i, settings.canSettings[i].nomSpeed);
                 if ((i == 0) && (settings.systemType == 2))
                 {
                     digitalWrite(SW_EN, HIGH); // MUST be HIGH to use CAN0 channel
-                    Serial.println("Enabling SWCAN Mode");
+                    DEBUG("Enabling SWCAN Mode\n");
                 }
                 if ((i == 1) && (settings.systemType == 2))
                 {
                     digitalWrite(SW_EN, LOW); // MUST be LOW to use CAN1 channel
-                    Serial.println("Enabling CAN1 will force CAN0 off.");
+                    DEBUG("Enabling CAN1 will force CAN0 off.\n");
                 }
             }
             else
             {
                 canBuses[i]->beginFD(settings.canSettings[i].nomSpeed, settings.canSettings[i].fdSpeed);
-                Serial.printf("Enabled CAN1 In FD Mode With Nominal Speed %u and Data Speed %u",
-                              settings.canSettings[i].nomSpeed, settings.canSettings[i].fdSpeed);
+                DEBUG("Enabled CAN%u In FD Mode With Nominal Speed %u and Data Speed %u",
+                      i, settings.canSettings[i].nomSpeed, settings.canSettings[i].fdSpeed);
             }
 
             if (settings.canSettings[i].listenOnly)
@@ -109,15 +112,6 @@ void CANManager::setup()
     }
 
     busLoadTimer = millis();
-
-    xTaskCreatePinnedToCore(
-        transportTask,
-        "transportTask",
-        4096,
-        NULL,
-        2,
-        NULL,
-        1);
 }
 
 void CANManager::addBits(int offset, CAN_FRAME &frame)
@@ -194,19 +188,6 @@ void CANManager::displayFrame(CAN_FRAME_FD &frame, int whichBus)
 
 void CANManager::loop()
 {
-    static uint32_t lastStatPrint = 0;
-
-    if (millis() - lastStatPrint > 1000)
-    {
-        lastStatPrint = millis();
-
-        uint32_t overflows = ringOverflowCount;
-        ringOverflowCount = 0;
-
-        DEBUG("RingOverflow=%lu Head=%u Tail=%u\n",
-                     overflows, ringHead, ringTail);
-    }
-
     CAN_FRAME incoming;
     CAN_FRAME_FD inFD;
     // size_t wifiLength = wifiGVRET.numAvailableBytes();
@@ -231,42 +212,9 @@ void CANManager::loop()
             // updateBusloadLED(busLoad[1].busloadPercentage);
         }
     }
-
-    for (int i = 0; i < SysSettings.numBuses; i++)
-    {
-        if (!canBuses[i])
-            continue;
-        if (!settings.canSettings[i].enabled)
-            continue;
-        // while ( (canBuses[i]->available() > 0) && (maxLength < (WIFI_BUFF_SIZE - 80)))
-        while (canBuses[i]->available() > 0)
-        {
-            if (settings.canSettings[i].fdMode == 0)
-            {
-                // canBuses[i]->read(incoming);
-                // addBits(i, incoming);
-                // displayFrame(incoming, i);
-                canBuses[i]->read(incoming);
-                addBits(i, incoming);
-                pushFrame(incoming, i);
-            }
-            else
-            {
-                canBuses[i]->readFD(inFD);
-                addBits(i, inFD);
-                displayFrame(inFD, i);
-            }
-            if ((incoming.id > 0x7DF && incoming.id < 0x7F0) || elmEmulator.getMonitorMode())
-                elmEmulator.processCANReply(incoming);
-
-            // wifiLength = wifiGVRET.numAvailableBytes();
-            // serialLength = serialGVRET.numAvailableBytes();
-            // maxLength = (wifiLength > serialLength) ? wifiLength : serialLength;
-        }
-    }
 }
 
-static void transportTask(void *arg)
+void transportTask(void *arg)
 {
     while (true)
     {
@@ -292,5 +240,57 @@ static void transportTask(void *arg)
         {
             vTaskDelay(1);
         }
+
+        // print ringOverflowCount every 1 seconds for debugging purposes
+        // ---- STATS BLOCK MUST BE INSIDE LOOP ----
+        static uint32_t lastPrint = 0;
+
+        if (millis() - lastPrint > 1000)
+        {
+            lastPrint = millis();
+
+            uint32_t overflows = ringOverflowCount;
+            ringOverflowCount = 0;
+
+            uint16_t used =
+                (ringHead >= ringTail) ? (ringHead - ringTail) : (CAN_RING_SIZE - ringTail + ringHead);
+
+            DEBUG("Overflow=%lu Used=%u Head=%u Tail=%u Heap:%u\n",
+                  overflows, used, ringHead, ringTail, ESP.getFreeHeap());
+        }
+    }
+}
+
+void canRxTask(void *arg)
+{
+    CAN_FRAME incoming;
+
+    while (true)
+    {
+        for (int i = 0; i < SysSettings.numBuses; i++)
+        {
+            if (!canBuses[i])
+                continue;
+            if (!settings.canSettings[i].enabled)
+                continue;
+
+            // Only try to read ONE frame per cycle
+            if (canBuses[i]->available() > 0)
+            {
+                if (canBuses[i]->read(incoming))
+                {
+                    canManager.addBits(i, incoming);
+                    pushFrame(incoming, i);
+
+                    if ((incoming.id > 0x7DF && incoming.id < 0x7F0) ||
+                        elmEmulator.getMonitorMode())
+                    {
+                        elmEmulator.processCANReply(incoming);
+                    }
+                }
+            }
+        }
+
+        vTaskDelay(1); // critical: do NOT use taskYIELD here
     }
 }

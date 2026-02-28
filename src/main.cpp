@@ -38,23 +38,37 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "lawicel.h"
 #include "esp_task_wdt.h"
 
-//Converts reason type to a C string.
-//Type is located in /tools/sdk/esp32/include/esp_system/include/esp_system.h
-const char *resetReasonName(esp_reset_reason_t r) {
-  switch (r) {
-    case ESP_RST_UNKNOWN:   return "Unknown";
-    case ESP_RST_POWERON:   return "PowerOn";    //Power on or RST pin toggled
-    case ESP_RST_EXT:       return "ExtPin";     //External pin - not applicable for ESP32
-    case ESP_RST_SW:        return "Reboot";     //esp_restart()
-    case ESP_RST_PANIC:     return "Crash";      //Exception/panic
-    case ESP_RST_INT_WDT:   return "WDT_Int";    //Interrupt watchdog (software or hardware)
-    case ESP_RST_TASK_WDT:  return "WDT_Task";   //Task watchdog
-    case ESP_RST_WDT:       return "WDT_Other";  //Other watchdog
-    case ESP_RST_DEEPSLEEP: return "Sleep";      //Reset after exiting deep sleep mode
-    case ESP_RST_BROWNOUT:  return "BrownOut";   //Brownout reset (software or hardware)
-    case ESP_RST_SDIO:      return "SDIO";       //Reset over SDIO
-    default:                return "";
-  }
+// Converts reason type to a C string.
+// Type is located in /tools/sdk/esp32/include/esp_system/include/esp_system.h
+const char *resetReasonName(esp_reset_reason_t r)
+{
+    switch (r)
+    {
+    case ESP_RST_UNKNOWN:
+        return "Unknown";
+    case ESP_RST_POWERON:
+        return "PowerOn"; // Power on or RST pin toggled
+    case ESP_RST_EXT:
+        return "ExtPin"; // External pin - not applicable for ESP32
+    case ESP_RST_SW:
+        return "Reboot"; // esp_restart()
+    case ESP_RST_PANIC:
+        return "Crash"; // Exception/panic
+    case ESP_RST_INT_WDT:
+        return "WDT_Int"; // Interrupt watchdog (software or hardware)
+    case ESP_RST_TASK_WDT:
+        return "WDT_Task"; // Task watchdog
+    case ESP_RST_WDT:
+        return "WDT_Other"; // Other watchdog
+    case ESP_RST_DEEPSLEEP:
+        return "Sleep"; // Reset after exiting deep sleep mode
+    case ESP_RST_BROWNOUT:
+        return "BrownOut"; // Brownout reset (software or hardware)
+    case ESP_RST_SDIO:
+        return "SDIO"; // Reset over SDIO
+    default:
+        return "";
+    }
 }
 
 byte i = 0;
@@ -189,6 +203,7 @@ void setup()
     esp_reset_reason_t r = esp_reset_reason();
     SAVVYPORT.printf("\r\nReset reason %i - %s\r\n\r\n", r, resetReasonName(r));
     DEBUG("\r\nReset reason %i - %s\r\n\r\n", r, resetReasonName(r));
+    DEBUG("Free heap before setup: %u\n", ESP.getFreeHeap());
 
     SysSettings.isWifiConnected = false;
 
@@ -214,10 +229,35 @@ void setup()
 
     canManager.setup();
 
+    // allow system to stabilize before creating tasks
+    delay(200);
+
+    // Create CAN RX task (Core 1)
+    xTaskCreatePinnedToCore(
+        canRxTask,
+        "canRxTask",
+        4096,
+        NULL,
+        3,
+        NULL,
+        1);
+
+    // Create transport task (Core 0)
+    xTaskCreatePinnedToCore(
+        transportTask,
+        "transportTask",
+        4096,
+        NULL,
+        2,
+        NULL,
+        0);
+
     SysSettings.lawicelMode = false;
     SysSettings.lawicelAutoPoll = false;
     SysSettings.lawicelTimestamping = false;
     SysSettings.lawicelPollCounter = 0;
+
+    DEBUG("Free heap after setup: %u\n", ESP.getFreeHeap());
 }
 
 void sendMarkTriggered(int which)
@@ -241,7 +281,7 @@ void loop()
     if (SysSettings.lawicelPollCounter > 0)
         SysSettings.lawicelPollCounter--;
 
-    canManager.loop();
+    // canManager.loop();
     wifiManager.loop();
 
     size_t wifiLength = wifiGVRET.numAvailableBytes();

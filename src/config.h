@@ -72,7 +72,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define DEBUGLN(...)
 #endif
 
-// #define FAST_DEBUG
+#define FAST_DEBUG
 
 #ifdef FAST_DEBUG
 #define DEBUGFAST(fmt, ...)                          \

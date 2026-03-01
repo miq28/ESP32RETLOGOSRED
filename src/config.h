@@ -36,7 +36,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "esp32_can.h"
 #include <Preferences.h>
 #include "rs485.h"
-// #include "serial_dispatcher.h"
+#include "led_manager.h"
 
 // #if ARDUINO_USB_MODE == 0 && ARDUINO_USB_CDC_ON_BOOT == 0
 // #define DEBUGPORT Serial    // Serial is the USB CDC port on the ESP32-S3 when ARDUINO_USB_MODE is 0

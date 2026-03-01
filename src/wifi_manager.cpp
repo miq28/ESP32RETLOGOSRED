@@ -39,32 +39,6 @@
 #include <Update.h>
 #include <WiFi.h>
 #include "ELM327_Emulator.h"
-// #include <Adafruit_NeoPixel.h>
-
-#ifdef CONFIG_IDF_TARGET_ESP32 // for WeAct Studio CAN 485
-#define RGB_BUILTIN 4
-#elifdef CONFIG_IDF_TARGET_ESP32S3
-#define RGB_BUILTIN 48
-#endif
-
-// #ifdef CONFIG_IDF_TARGET_ESP32 // for WeAct Studio CAN 485
-// #define RGB_BUILTIN 4
-// #elifdef CONFIG_IDF_TARGET_ESP32S3
-// #define RGB_BUILTIN 48
-// #endif
-//
-// Adafruit_NeoPixel led(1, RGB_BUILTIN, NEO_GRB + NEO_KHZ800);
-
-void setColor(uint8_t r, uint8_t g, uint8_t b)
-{
-    rgbLedWrite(RGB_BUILTIN, r, g, b);
-}
-
-// void setColor(uint8_t r, uint8_t g, uint8_t b)
-// {
-//     led.setPixelColor(0, led.Color(r, g, b));
-//     led.show();
-// }
 
 static IPAddress broadcastAddr(255, 255, 255, 255);
 
@@ -92,7 +66,7 @@ void WiFiEvent(WiFiEvent_t event)
         break;
     case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
         Serial.println("Disconnected from WiFi access point");
-        setColor(15, 0, 0); // red = disconnected
+        // setColor(15, 0, 0); // red = disconnected
         break;
     case ARDUINO_EVENT_WIFI_STA_AUTHMODE_CHANGE:
         Serial.println("Authentication mode of access point has changed");
@@ -100,11 +74,11 @@ void WiFiEvent(WiFiEvent_t event)
     case ARDUINO_EVENT_WIFI_STA_GOT_IP:
         Serial.print("Obtained IP address: ");
         Serial.println(WiFi.localIP());
-        setColor(0, 0, 15); // blue
+        // setColor(0, 0, 15); // blue
         break;
     case ARDUINO_EVENT_WIFI_STA_LOST_IP:
         Serial.println("Lost IP address and IP address is reset to 0");
-        setColor(0, 0, 0); // off
+        // setColor(0, 0, 0); // off
         break;
     case ARDUINO_EVENT_WPS_ER_SUCCESS:
         Serial.println("WiFi Protected Setup (WPS): succeeded in enrollee mode");
@@ -178,6 +152,7 @@ void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info)
                   WiFi.RSSI());
     // needServerInit = true;
     SysSettings.isWifiConnected = true;
+    ledSetWifiConnected(true);
 }
 
 WiFiServer wifiServer(23);
@@ -350,8 +325,6 @@ WiFiManager::WiFiManager()
 
 void WiFiManager::setup()
 {
-    setColor(0, 0, 0); // off
-
     if (settings.wifiMode == 1) // connect to an AP
     {
         // Examples of different ways to register wifi events;
@@ -365,6 +338,7 @@ void WiFiManager::setup()
                 Serial.println(info.wifi_sta_disconnected.reason);
                 SysSettings.isWifiConnected = false;
                 SysSettings.isWifiActive = false;
+                ledSetWifiConnected(false);
             },
             WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
 

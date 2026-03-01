@@ -39,6 +39,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "esp_task_wdt.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
+#include "led_manager.h"
 
 SemaphoreHandle_t serialMutex;
 
@@ -215,6 +216,8 @@ void setup()
     DEBUG("\r\nReset reason %i - %s\r\n\r\n", r, resetReasonName(r));
     DEBUG("Free heap before setup: %u\n", ESP.getFreeHeap());
 
+    ledInit(20); // 0-255 set brightness
+
     // // 1. Ensure any previous watchdog config is removed
     // esp_task_wdt_deinit();
 
@@ -230,8 +233,6 @@ void setup()
 
     // // 4. Add current task (loopTask) to be watched
     // esp_task_wdt_add(NULL);
-
-    // serialDispatcherInit();
 
     SysSettings.isWifiConnected = false;
 

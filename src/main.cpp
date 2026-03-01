@@ -37,9 +37,13 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "can_manager.h"
 #include "lawicel.h"
 #include "esp_task_wdt.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+
+SemaphoreHandle_t serialMutex;
 
 // Define the WDT timeout in seconds
-#define WDT_TIMEOUT 10 
+#define WDT_TIMEOUT 10
 
 // Converts reason type to a C string.
 // Type is located in /tools/sdk/esp32/include/esp_system/include/esp_system.h
@@ -203,6 +207,9 @@ void setup()
     SAVVYPORT.begin(1000000);
     DEBUGPORT.begin(115200);
 
+    // Create the mutex before using it
+    serialMutex = xSemaphoreCreateMutex();
+
     esp_reset_reason_t r = esp_reset_reason();
     SAVVYPORT.printf("\r\nReset reason %i - %s\r\n\r\n", r, resetReasonName(r));
     DEBUG("\r\nReset reason %i - %s\r\n\r\n", r, resetReasonName(r));
@@ -225,7 +232,6 @@ void setup()
     // esp_task_wdt_add(NULL);
 
     // serialDispatcherInit();
-
 
     SysSettings.isWifiConnected = false;
 

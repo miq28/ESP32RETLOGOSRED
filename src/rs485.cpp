@@ -1,12 +1,15 @@
 #include "rs485.h"
 #include <stdarg.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 
 #define RS485_DE_PIN 17
 #define RS485_RO_PIN 21
 #define RS485_DI_PIN 22
 
-// Use UART2
 static HardwareSerial RS485Serial(2);
+
+extern SemaphoreHandle_t serialMutex;
 
 RS485Port RS485;
 
@@ -30,18 +33,30 @@ void RS485Port::setRX()
 
 void RS485Port::print(const char *str)
 {
+    if (serialMutex)
+        xSemaphoreTake(serialMutex, portMAX_DELAY);
+
     setTX();
     RS485Serial.print(str);
     RS485Serial.flush();
     setRX();
+
+    if (serialMutex)
+        xSemaphoreGive(serialMutex);
 }
 
 void RS485Port::println(const char *str)
 {
+    if (serialMutex)
+        xSemaphoreTake(serialMutex, portMAX_DELAY);
+
     setTX();
     RS485Serial.println(str);
     RS485Serial.flush();
     setRX();
+
+    if (serialMutex)
+        xSemaphoreGive(serialMutex);
 }
 
 void RS485Port::printf(const char *format, ...)
@@ -53,16 +68,28 @@ void RS485Port::printf(const char *format, ...)
     vsnprintf(buffer, sizeof(buffer), format, args);
     va_end(args);
 
+    if (serialMutex)
+        xSemaphoreTake(serialMutex, portMAX_DELAY);
+
     setTX();
     RS485Serial.print(buffer);
     RS485Serial.flush();
     setRX();
+
+    if (serialMutex)
+        xSemaphoreGive(serialMutex);
 }
 
 void RS485Port::write(const uint8_t *data, size_t len)
 {
+    if (serialMutex)
+        xSemaphoreTake(serialMutex, portMAX_DELAY);
+
     setTX();
     RS485Serial.write(data, len);
     RS485Serial.flush();
     setRX();
+
+    if (serialMutex)
+        xSemaphoreGive(serialMutex);
 }

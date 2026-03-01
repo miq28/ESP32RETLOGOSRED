@@ -36,6 +36,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "esp32_can.h"
 #include <Preferences.h>
 #include "rs485.h"
+// #include "serial_dispatcher.h"
 
 // #if ARDUINO_USB_MODE == 0 && ARDUINO_USB_CDC_ON_BOOT == 0
 // #define DEBUGPORT Serial    // Serial is the USB CDC port on the ESP32-S3 when ARDUINO_USB_MODE is 0
@@ -55,6 +56,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // #define RELEASE
 
 #ifndef RELEASE
+
 #define DEBUG(fmt, ...)                          \
     {                                            \
         static const char pfmt[] PROGMEM = fmt;  \
@@ -65,8 +67,14 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         static const char pfmt[] PROGMEM = fmt;  \
         static const char rn[] PROGMEM = "\r\n"; \
         DEBUGPORT.printf_P(pfmt, ##__VA_ARGS__); \
-        DEBUGPORT.printf_P(rn);                  \
+        DEBUGPORT.printf_P(rn);            \
     }
+
+// #define DEBUG(fmt, ...) \
+//     serialEnqueueFormat(fmt, ##__VA_ARGS__)
+
+// #define DEBUGLN(fmt, ...) \
+//     serialEnqueueFormat(fmt "\r\n", ##__VA_ARGS__)
 #else
 #define DEBUG(...)
 #define DEBUGLN(...)
@@ -87,6 +95,13 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         DEBUGPORT.printf_P(pfmt, ##__VA_ARGS__); \
         DEBUGPORT.printf_P(rn);                  \
     }
+
+// #define DEBUGFAST(fmt, ...) \
+//     serialEnqueueFormat(fmt, ##__VA_ARGS__)
+
+// #define DEBUGFASTLN(fmt, ...) \
+//     serialEnqueueFormat(fmt "\r\n", ##__VA_ARGS__)
+
 #else
 #define DEBUGFAST(...)
 #define DEBUGFASTLN(...)

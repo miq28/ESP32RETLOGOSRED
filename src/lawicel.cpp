@@ -347,6 +347,7 @@ void LAWICELHandler::sendFrameToBuffer(CAN_FRAME &frame, int whichBus)
         Serial.print(frame.id, HEX);
         if (frame.extended)
             Serial.print(" X ");
+            // serialEnqueueFormat(" X ");
         else
             Serial.print(" S ");
 

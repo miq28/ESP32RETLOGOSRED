@@ -38,6 +38,9 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "lawicel.h"
 #include "esp_task_wdt.h"
 
+// Define the WDT timeout in seconds
+#define WDT_TIMEOUT 10 
+
 // Converts reason type to a C string.
 // Type is located in /tools/sdk/esp32/include/esp_system/include/esp_system.h
 const char *resetReasonName(esp_reset_reason_t r)
@@ -205,6 +208,25 @@ void setup()
     DEBUG("\r\nReset reason %i - %s\r\n\r\n", r, resetReasonName(r));
     DEBUG("Free heap before setup: %u\n", ESP.getFreeHeap());
 
+    // // 1. Ensure any previous watchdog config is removed
+    // esp_task_wdt_deinit();
+
+    // // 2. Define the configuration structure
+    // esp_task_wdt_config_t wdt_config = {
+    //     .timeout_ms = WDT_TIMEOUT * 1000, // Convert seconds to milliseconds
+    //     .idle_core_mask = (1 << 0) | (1 << 1),// Monitor idle tasks on both cores
+    //     .trigger_panic = true // Trigger a panic if the WDT timeout occurs
+    // };
+
+    // // 3. Initialize the WDT with the configuration structure
+    // ESP_ERROR_CHECK(esp_task_wdt_init(&wdt_config));
+
+    // // 4. Add current task (loopTask) to be watched
+    // esp_task_wdt_add(NULL);
+
+    // serialDispatcherInit();
+
+
     SysSettings.isWifiConnected = false;
 
     loadSettings();
@@ -246,7 +268,7 @@ void setup()
     xTaskCreatePinnedToCore(
         transportTask,
         "transportTask",
-        4096,
+        6144,
         NULL,
         2,
         NULL,
@@ -312,4 +334,8 @@ void loop()
     }
 
     elmEmulator.loop();
+
+    // // 5. Reset the watchdog periodically
+    // esp_task_wdt_reset();
+    // delay(1); // Mandatory for WDT reset to apply in some versions
 }

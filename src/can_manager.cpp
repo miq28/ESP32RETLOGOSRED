@@ -9,11 +9,11 @@
 
 #define CAN_RING_SIZE 512 // increase if needed (RAM cost ~ 32KB)
 
-// void transportTask(void *arg);
-
 static volatile uint32_t ringOverflowCount = 0;
 
-// void canRxTask(void *arg);
+// FPS counter for debugging purposes
+static volatile uint32_t frameCounter[NUM_BUSES] = {0};
+static volatile uint32_t lastFPS[NUM_BUSES] = {0};
 
 struct RingItem
 {
@@ -252,11 +252,38 @@ void transportTask(void *arg)
             uint32_t overflows = ringOverflowCount;
             ringOverflowCount = 0;
 
+            // print stats: overflows, used, head, tail, free heap
             uint16_t used =
                 (ringHead >= ringTail) ? (ringHead - ringTail) : (CAN_RING_SIZE - ringTail + ringHead);
 
-            DEBUG("Overflow=%lu Used=%u Head=%u Tail=%u Heap:%u\n",
-                  overflows, used, ringHead, ringTail, ESP.getFreeHeap());
+            // print FPS counter
+            for (int b = 0; b < SysSettings.numBuses; b++)
+            {
+                lastFPS[b] = frameCounter[b];
+                frameCounter[b] = 0;
+            }
+
+            // print uptime in days, hours, minutes, seconds
+            uint64_t uptimeUs = esp_timer_get_time();
+            uint64_t uptimeSec = uptimeUs / 1000000ULL;
+
+            uint32_t days = uptimeSec / 86400;
+            uint32_t hours = (uptimeSec % 86400) / 3600;
+            uint32_t minutes = (uptimeSec % 3600) / 60;
+            uint32_t seconds = uptimeSec % 60;
+
+            DEBUG("Uptime=%ud %02u:%02u:%02u Heap:%u FPS0=%lu Overflow=%lu Used=%u Head=%u Tail=%u\n",
+                  days,
+                  hours,
+                  minutes,
+                  seconds,
+                  ESP.getFreeHeap(),
+                  lastFPS[0],
+                  overflows,
+                  used,
+                  ringHead,
+                  ringTail
+                );
         }
     }
 }
@@ -267,26 +294,25 @@ void canRxTask(void *arg)
 
     while (true)
     {
-        for (int i = 0; i < SysSettings.numBuses; i++)
+        for (int i = 0; i < NUM_BUSES; i++)
         {
-            if (!canBuses[i])
+            if (i >= SysSettings.numBuses)
+                continue;
+
+            CAN_COMMON *bus = canBuses[i];
+
+            if (!bus)
                 continue;
             if (!settings.canSettings[i].enabled)
                 continue;
 
-            // Only try to read ONE frame per cycle
-            if (canBuses[i]->available() > 0)
+            if (bus->available() > 0)
             {
-                if (canBuses[i]->read(incoming))
+                if (bus->read(incoming))
                 {
                     canManager.addBits(i, incoming);
                     pushFrame(incoming, i);
-
-                    if ((incoming.id > 0x7DF && incoming.id < 0x7F0) ||
-                        elmEmulator.getMonitorMode())
-                    {
-                        elmEmulator.processCANReply(incoming);
-                    }
+                    frameCounter[i] = frameCounter[i] + 1;
                 }
             }
         }

@@ -9,7 +9,7 @@
 #include "lawicel.h"
 #include "ELM327_Emulator.h"
 
-#define CAN_RING_SIZE 512 // increase if needed (RAM cost ~ 32KB)
+#define CAN_RING_SIZE 1024 // 512 // increase if needed (RAM cost ~ 32KB)
 
 static volatile uint32_t ringOverflowCount = 0;
 
@@ -227,7 +227,32 @@ void transportTask(void *arg)
 {
     while (true)
     {
-        if (!ringIsEmpty())
+        // if (!ringIsEmpty())
+        // {
+        //     RingItem &item = canRing[ringTail];
+
+        //     if (settings.enableLawicel && SysSettings.lawicelMode)
+        //     {
+        //         lawicel.sendFrameToBuffer(item.frame, item.bus);
+        //     }
+        //     else
+        //     {
+        //         if (SysSettings.isWifiActive)
+        //             wifiGVRET.sendFrameToBuffer(item.frame, item.bus);
+        //         else
+        //             serialGVRET.sendFrameToBuffer(item.frame, item.bus);
+        //     }
+
+        //     ringTail = (ringTail + 1) % CAN_RING_SIZE;
+        // }
+        // else
+        // {
+        //     vTaskDelay(1);
+        // }
+
+        int framesProcessed = 0;
+
+        while (!ringIsEmpty() && framesProcessed < 16)
         {
             RingItem &item = canRing[ringTail];
 
@@ -244,11 +269,12 @@ void transportTask(void *arg)
             }
 
             ringTail = (ringTail + 1) % CAN_RING_SIZE;
+
+            framesProcessed++;
         }
-        else
-        {
+
+        if (framesProcessed == 0)
             vTaskDelay(1);
-        }
 
         // print ringOverflowCount every 1 seconds for debugging purposes
         // ---- STATS BLOCK MUST BE INSIDE LOOP ----
@@ -396,7 +422,7 @@ static void handleBusOffRecovery()
     {
         DEBUG("CAN recovery complete. Restarting driver...\n");
 
-        twai_start();   // Restart controller
+        twai_start(); // Restart controller
 
         recoveryInProgress = false;
         ledSetCanError(false);

@@ -108,7 +108,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #endif
 
 // size to use for buffering writes to USB. On the ESP32 we're actually talking TTL serial to a TTL<->USB chip
-#define SER_BUFF_SIZE 4096
+#define SER_BUFF_SIZE 1024
 
 // Buffer for CAN frames when sending over wifi. This allows us to build up a multi-frame packet that goes
 // over the air all at once. This is much more efficient than trying to send a new TCP/IP packet for each and every

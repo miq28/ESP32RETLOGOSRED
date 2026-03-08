@@ -227,32 +227,7 @@ void transportTask(void *arg)
 {
     while (true)
     {
-        // if (!ringIsEmpty())
-        // {
-        //     RingItem &item = canRing[ringTail];
-
-        //     if (settings.enableLawicel && SysSettings.lawicelMode)
-        //     {
-        //         lawicel.sendFrameToBuffer(item.frame, item.bus);
-        //     }
-        //     else
-        //     {
-        //         if (SysSettings.isWifiActive)
-        //             wifiGVRET.sendFrameToBuffer(item.frame, item.bus);
-        //         else
-        //             serialGVRET.sendFrameToBuffer(item.frame, item.bus);
-        //     }
-
-        //     ringTail = (ringTail + 1) % CAN_RING_SIZE;
-        // }
-        // else
-        // {
-        //     vTaskDelay(1);
-        // }
-
-        int framesProcessed = 0;
-
-        while (!ringIsEmpty() && framesProcessed < 16)
+        if (!ringIsEmpty())
         {
             RingItem &item = canRing[ringTail];
 
@@ -269,12 +244,11 @@ void transportTask(void *arg)
             }
 
             ringTail = (ringTail + 1) % CAN_RING_SIZE;
-
-            framesProcessed++;
         }
-
-        if (framesProcessed == 0)
+        else
+        {
             vTaskDelay(1);
+        }
 
         // print ringOverflowCount every 1 seconds for debugging purposes
         // ---- STATS BLOCK MUST BE INSIDE LOOP ----

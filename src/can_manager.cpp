@@ -1,7 +1,6 @@
 #include <Arduino.h>
 #include "config.h"
 #include "can_manager.h"
-#include "driver/twai.h"
 #include "led_manager.h"
 #include "esp32_can.h"
 #include "SerialConsole.h"
@@ -9,16 +8,11 @@
 #include "lawicel.h"
 #include "ELM327_Emulator.h"
 
+volatile bool canPauseRX = false;
+
 #define CAN_RING_SIZE 1024 // 512 // increase if needed (RAM cost ~ 32KB)
 
 static volatile uint32_t ringOverflowCount = 0;
-
-static void checkCanErrorState();
-static void handleBusOffRecovery();
-
-// recovery state variables
-static bool recoveryInProgress = false;
-static uint32_t recoveryStartTime = 0;
 
 // FPS counter for debugging purposes
 static volatile uint32_t frameCounter[NUM_BUSES] = {0};
@@ -311,6 +305,12 @@ void canRxTask(void *arg)
 
     while (true)
     {
+        if (canPauseRX)
+        {
+            vTaskDelay(5);
+            continue;
+        }
+
         for (int i = 0; i < NUM_BUSES; i++)
         {
             if (i >= SysSettings.numBuses)
@@ -336,81 +336,6 @@ void canRxTask(void *arg)
             }
         }
 
-        // Check CAN error state every 100ms and update LED accordingly
-        static uint32_t lastErrorCheck = 0;
-
-        if (millis() - lastErrorCheck > 100)
-        {
-            lastErrorCheck = millis();
-            checkCanErrorState();
-        }
-
         vTaskDelay(1); // critical: do NOT use taskYIELD here
-    }
-}
-
-static void checkCanErrorState()
-{
-    twai_status_info_t status;
-
-    if (twai_get_status_info(&status) != ESP_OK)
-        return;
-
-    bool error = false;
-
-    // BUS OFF detected
-    if (status.state == TWAI_STATE_BUS_OFF)
-    {
-        error = true;
-
-        if (!recoveryInProgress)
-        {
-            recoveryInProgress = true;
-            recoveryStartTime = millis();
-
-            DEBUG("CAN BUS OFF detected. Initiating recovery...\n");
-            twai_initiate_recovery();
-        }
-    }
-
-    // Error passive detection
-    if (status.tx_error_counter >= 128 || status.rx_error_counter >= 128)
-        error = true;
-
-    ledSetCanError(error);
-
-    // Handle recovery process
-    if (recoveryInProgress)
-        handleBusOffRecovery();
-}
-
-static void handleBusOffRecovery()
-{
-    twai_status_info_t status;
-
-    if (twai_get_status_info(&status) != ESP_OK)
-        return;
-
-    // Recovery complete when state becomes STOPPED
-    if (status.state == TWAI_STATE_STOPPED)
-    {
-        DEBUG("CAN recovery complete. Restarting driver...\n");
-
-        twai_start(); // Restart controller
-
-        recoveryInProgress = false;
-        ledSetCanError(false);
-    }
-
-    // Safety timeout (5 seconds max)
-    if (millis() - recoveryStartTime > 5000)
-    {
-        DEBUG("CAN recovery timeout. Forcing restart...\n");
-
-        twai_stop();
-        twai_start();
-
-        recoveryInProgress = false;
-        ledSetCanError(false);
     }
 }

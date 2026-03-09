@@ -33,3 +33,5 @@ private:
 void canRxTask(void *arg);
 void transportTask(void *arg);
 
+extern volatile bool canPauseRX;
+

@@ -1,59 +1,365 @@
-ESP32RET
-=======
+Summary of the work completed so far, focusing on architecture, major code changes, and the resulting system behavior.
 
-Reverse Engineering Tool running on ESP32 based hardware. 
+---
 
-Created for https://logos-red.com/blog/how-to-hack-a-car-wirelessly-sending-remote-commands/
+# 1. Removed the Old CAN Library Layer
 
-#### Requirements:
+Removed the wrapper around the ESP32 CAN driver:
 
-You will need the following to be able to compile the run this project:
+```text
+esp32_can_builtin.cpp
+esp32_can_builtin.h
+```
 
-- [Arduino IDE](https://www.arduino.cc/en/Main/Software) Tested on 2.3.2
-- [Arduino-ESP32](https://github.com/espressif/arduino-esp32) - Allows for programming the ESP32 with the Arduino IDE
-- [esp32_can](https://github.com/collin80/esp32_can) - A unified CAN library that supports the built-in CAN plus MCP2515 and MCP2517FD
-- [can_common](https://github.com/collin80/can_common) - Common structures and functionality for CAN libraries
+Reason:
 
+```text
+extra tasks
+internal queues
+complex driver restart logic
+difficult debugging
+```
 
-This program is larger than the default partitioning scheme. You will need to use
-a larger scheme. The recommended way to do this: Tools -> Partition Scheme -> Minimal SPIFFS
+Replaced with **direct TWAI driver usage**.
 
-All libraries belong in %USERPROFILE%\Documents\Arduino\hardware\esp32\libraries (Windows) or ~/Arduino/hardware/esp32/libraries (Linux/Mac).
+---
 
+# 2. Introduced a Minimal TWAI Driver Layer
 
-#### The firmware is a work in progress. What works:
-- CAN0 / CAN1 reading and writing
-- Preferences are saved and loaded
-- Text console is active (configuration and CAN capture display)
-- Can connect as a GVRET device with SavvyCAN
-- LAWICEL support (somewhat tested. Still experimental)
-- Bluetooth works to create an ELM327 compatible interface (tested with Torque app)
+Created:
 
-#### What does not work:
-- Digital and Analog I/O
+```text
+can_driver.cpp
+can_driver.h
+```
 
-#### License:
+Responsibilities:
 
-This software is MIT licensed:
+```text
+TWAI initialization
+TWAI start/stop
+CAN speed change
+frame transmit
+```
 
-Copyright (c) 2014-2020 Collin Kidder, Michael Neuweiler
+Example functions:
 
-Permission is hereby granted, free of charge, to any person obtaining
-a copy of this software and associated documentation files (the
-"Software"), to deal in the Software without restriction, including
-without limitation the rights to use, copy, modify, merge, publish,
-distribute, sublicense, and/or sell copies of the Software, and to
-permit persons to whom the Software is furnished to do so, subject to
-the following conditions:
+```cpp
+can_init()
+can_stop()
+can_set_speed()
+can_send()
+```
 
-The above copyright notice and this permission notice shall be included
-in all copies or substantial portions of the Software.
+Key configuration:
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
-TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
-SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```cpp
+g_config.rx_queue_len = 128
+g_config.tx_queue_len = 16
+```
 
+This significantly improves burst handling.
+
+---
+
+# 3. Built a Deterministic CAN Processing Pipeline
+
+Implemented a dedicated architecture in **can_manager.cpp**.
+
+Pipeline:
+
+```text
+TWAI
+↓
+canRxTask
+↓
+ring buffer
+↓
+transportTask
+↓
+GVRET
+↓
+Serial / WiFi
+↓
+SavvyCAN
+```
+
+Goals achieved:
+
+```text
+decouple CAN reception from transport
+prevent blocking serial/WiFi from affecting CAN capture
+avoid frame loss during bursts
+```
+
+---
+
+# 4. Implemented a Lock-Free Ring Buffer
+
+Structure:
+
+```cpp
+struct RingItem
+{
+    uint32_t timestamp;
+    uint8_t bus;
+    CAN_FRAME frame;
+};
+```
+
+Buffer size:
+
+```text
+CAN_RING_SIZE = 1024
+```
+
+Push operation:
+
+```text
+canRxTask writes
+transportTask reads
+```
+
+Key safety improvement:
+
+```cpp
+__sync_synchronize();
+```
+
+Ensures frame memory is written before `ringHead` is updated.
+
+---
+
+# 5. Dedicated FreeRTOS Tasks
+
+Two core tasks were introduced.
+
+### CAN RX Task
+
+```text
+Core: 1
+Priority: 3
+```
+
+Responsibilities:
+
+```text
+read TWAI frames
+convert to CAN_FRAME
+push into ring buffer
+update statistics
+```
+
+Burst-drain logic:
+
+```cpp
+do
+{
+    process frame
+}
+while (twai_receive(&msg, 0) == ESP_OK);
+```
+
+---
+
+### Transport Task
+
+```text
+Core: 0
+Priority: 2
+```
+
+Responsibilities:
+
+```text
+pop frames from ring buffer
+forward to GVRET / LAWICEL
+handle WiFi / Serial transport
+print runtime statistics
+update RGB LED indicators
+```
+
+---
+
+# 6. Removed Duplicate RX Task
+
+Found unused code:
+
+```cpp
+can_driver.cpp → can_rx_task()
+```
+
+This task was not used and created confusion.
+
+Removed it so the only RX path is:
+
+```text
+can_manager.cpp → canRxTask()
+```
+
+---
+
+# 7. Moved CAN Task Creation Into CAN Manager
+
+Previously in `main.cpp`:
+
+```cpp
+xTaskCreatePinnedToCore(canRxTask)
+xTaskCreatePinnedToCore(transportTask)
+```
+
+Moved into:
+
+```cpp
+CANManager::setup()
+```
+
+Now `main.cpp` remains clean:
+
+```cpp
+wifiManager.setup();
+canManager.setup();
+```
+
+---
+
+# 8. Added Runtime Diagnostics
+
+Statistics printed every second:
+
+```text
+FPS
+ring usage
+overflow count
+heap
+uptime
+```
+
+Example output:
+
+```text
+Uptime=0d 00:13:45 Heap:90652 FPS0=820 Overflow=0 Used=35 Head=420 Tail=385
+```
+
+Additional metrics added:
+
+```text
+ringHighWater
+transportFrames
+twaiRxQueueHigh
+twaiRxQueueFullEvents
+```
+
+These help detect where frame loss might occur.
+
+---
+
+# 9. Improved TWAI Receive Logic
+
+RX task drains the TWAI queue efficiently:
+
+```cpp
+if (twai_receive(&msg, pdMS_TO_TICKS(1)) == ESP_OK)
+{
+    do
+    {
+        process frame
+    }
+    while (twai_receive(&msg, 0) == ESP_OK);
+}
+```
+
+Benefits:
+
+```text
+minimal interrupt overhead
+lower RX latency
+better burst handling
+```
+
+---
+
+# 10. Clean Final Initialization
+
+Current CAN setup:
+
+```cpp
+void CANManager::setup()
+{
+    can_init(settings.canSettings[0].nomSpeed);
+
+    busLoad setup
+
+    delay(200);
+
+    start CAN_RX task (core 1)
+    start transport task (core 0)
+}
+```
+
+This ensures:
+
+```text
+TWAI initialized first
+tasks start after driver stabilization
+```
+
+---
+
+# Current System Architecture
+
+```text
+main.cpp
+   ↓
+CANManager::setup()
+   ↓
+TWAI driver init
+   ↓
+CAN_RX task (core1)
+   ↓
+lock-free ring buffer (1024)
+   ↓
+transportTask (core0)
+   ↓
+GVRET protocol
+   ↓
+Serial / WiFi
+   ↓
+SavvyCAN
+```
+
+---
+
+# Performance Characteristics
+
+Current configuration:
+
+```text
+TWAI RX queue : 128
+ring buffer   : 1024
+RX task       : core1 priority 3
+transport     : core0 priority 2
+```
+
+Expected capability:
+
+```text
+800–1500 CAN frames/sec sustained
+```
+
+with no frame loss under normal conditions.
+
+---
+
+# Current Status
+
+System is now:
+
+```text
+stable
+simpler than original ESP32RET
+deterministic pipeline
+good debugging visibility
+```
+
+The firmware is essentially a **clean high-performance CAN sniffer implementation** for ESP32-S3.

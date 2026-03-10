@@ -145,30 +145,32 @@ void CANManager::loop()
 
 void transportTask(void *arg)
 {
+    const int MAX_BATCH = 12;
+
     while (true)
     {
-        if (!ringIsEmpty())
+        int batch = 0;
+
+        bool lawicelMode = settings.enableLawicel && SysSettings.lawicelMode;
+        bool wifi = SysSettings.isWifiActive;
+
+        while (!ringIsEmpty() && batch < MAX_BATCH)
         {
             RingItem &item = canRing[ringTail];
 
-            if (settings.enableLawicel && SysSettings.lawicelMode)
-            {
+            if (lawicelMode)
                 lawicel.sendFrameToBuffer(item.frame, item.bus);
-            }
+            else if (wifi)
+                wifiGVRET.sendFrameToBuffer(item.frame, item.bus);
             else
-            {
-                if (SysSettings.isWifiActive)
-                    wifiGVRET.sendFrameToBuffer(item.frame, item.bus);
-                else
-                    serialGVRET.sendFrameToBuffer(item.frame, item.bus);
-            }
+                serialGVRET.sendFrameToBuffer(item.frame, item.bus);
 
             ringTail = (ringTail + 1) % CAN_RING_SIZE;
+            batch++;
         }
-        else
-        {
+
+        if (batch == 0)
             vTaskDelay(1);
-        }
 
         // print ringOverflowCount every 1 seconds for debugging purposes
         // ---- STATS BLOCK MUST BE INSIDE LOOP ----

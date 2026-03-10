@@ -19,6 +19,14 @@ static volatile uint32_t ringOverflowCount = 0;
 static volatile uint32_t frameCounter[NUM_BUSES] = {0};
 static volatile uint32_t lastFPS[NUM_BUSES] = {0};
 
+// Track TWAI RX queue high-water mark
+static volatile uint32_t twaiRxQueueHigh = 0;
+static volatile uint32_t twaiRxQueueFullEvents = 0;
+// Track ring buffer high-water mark
+static volatile uint16_t ringHighWater = 0;
+// Track transport throughput
+static volatile uint32_t transportFrames = 0;
+
 struct RingItem
 {
     uint32_t timestamp;
@@ -46,13 +54,22 @@ static inline void pushFrame(const CAN_FRAME &frame, uint8_t bus)
 
     if (next == ringTail)
     {
-        ringOverflowCount++; // count overflow
-        return;              // drop newest
+        ringOverflowCount++;
+        return;
     }
 
-    // canRing[ringHead].timestamp = micros();
+    canRing[ringHead].timestamp = micros();
     canRing[ringHead].bus = bus;
     canRing[ringHead].frame = frame;
+
+    uint16_t used =
+        (ringHead >= ringTail) ? (ringHead - ringTail)
+                               : (CAN_RING_SIZE - ringTail + ringHead);
+
+    if (used > ringHighWater)
+        ringHighWater = used;
+
+    __sync_synchronize();
 
     ringHead = next;
 }
@@ -165,6 +182,8 @@ void transportTask(void *arg)
             else
                 serialGVRET.sendFrameToBuffer(item.frame, item.bus);
 
+            transportFrames++; // ← ADD HERE
+
             ringTail = (ringTail + 1) % CAN_RING_SIZE;
             batch++;
         }
@@ -203,17 +222,27 @@ void transportTask(void *arg)
             uint32_t minutes = (uptimeSec % 3600) / 60;
             uint32_t seconds = uptimeSec % 60;
 
-            DEBUG("Uptime=%ud %02u:%02u:%02u Heap:%u FPS0=%lu Overflow=%lu Used=%u Head=%u Tail=%u\n",
+            DEBUG("Uptime=%ud %02u:%02u:%02u Heap:%u FPS=%lu TX=%lu Ovf=%lu Used=%u Head=%u Tail=%u RingHW=%u TWAIHW=%lu Miss=%lu\n",
                   days,
                   hours,
                   minutes,
                   seconds,
                   ESP.getFreeHeap(),
                   lastFPS[0],
+                  transportFrames,
                   overflows,
                   used,
                   ringHead,
-                  ringTail);
+                  ringTail,
+                  ringHighWater,
+                  twaiRxQueueHigh,
+                  twaiRxQueueFullEvents);
+
+            // reset counters once per second
+            transportFrames = 0;
+            twaiRxQueueHigh = 0;
+            twaiRxQueueFullEvents = 0;
+            ringHighWater = 0;
         }
 
         //--- RGB LED BUSLOAD INDICATOR (for debugging purposes) ---
@@ -229,14 +258,12 @@ void transportTask(void *arg)
 
 void canRxTask(void *arg)
 {
-    twai_status_info_t status;
-
-    twai_get_status_info(&status);
-
-    DEBUG("TWAI state=%d\n", status.state);
-
     twai_message_t msg;
     CAN_FRAME frame;
+    twai_status_info_t st;
+
+    twai_get_status_info(&st);
+    DEBUG("TWAI state=%d\n", st.state);
 
     while (true)
     {
@@ -250,7 +277,6 @@ void canRxTask(void *arg)
         {
             do
             {
-                // process frame
                 ledNotifyCanActivity();
 
                 frame.id = msg.identifier;
@@ -263,7 +289,19 @@ void canRxTask(void *arg)
 
                 canManager.addBits(0, frame);
                 pushFrame(frame, 0);
+
                 frameCounter[0]++;
+
+                // ---- TWAI queue diagnostics ----
+                if (twai_get_status_info(&st) == ESP_OK)
+                {
+                    if (st.msgs_to_rx > twaiRxQueueHigh)
+                        twaiRxQueueHigh = st.msgs_to_rx;
+
+                    if (st.rx_missed_count > 0)
+                        twaiRxQueueFullEvents += st.rx_missed_count;
+                }
+
             } while (twai_receive(&msg, 0) == ESP_OK);
         }
     }

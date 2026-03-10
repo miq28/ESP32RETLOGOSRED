@@ -67,25 +67,8 @@ bool can_send(uint32_t id, bool ext, bool rtr, uint8_t len, uint8_t *data)
     msg.rtr = rtr;
     msg.data_length_code = len;
 
-    for(int i=0;i<len;i++)
+    for(int i = 0; i < len; i++)
         msg.data[i] = data[i];
 
     return twai_transmit(&msg, pdMS_TO_TICKS(4)) == ESP_OK;
-}
-
-void can_rx_task(void *arg)
-{
-    twai_message_t msg;
-
-    while (true)
-    {
-        if (twai_receive(&msg, 0) == ESP_OK)
-        {
-            // temporarily just count frames
-        }
-        else
-        {
-            taskYIELD();
-        }
-    }
 }

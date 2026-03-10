@@ -27,7 +27,8 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include "config.h"
-#include <esp32_can.h>
+// #include <esp32_can.h>
+#include "can_driver.h"
 #include <SPI.h>
 #include <Preferences.h>
 #include "ELM327_Emulator.h"
@@ -106,16 +107,13 @@ LAWICELHandler lawicel;
 
 SerialConsole console;
 
-CAN_COMMON *canBuses[NUM_BUSES];
+// CAN_COMMON *canBuses[NUM_BUSES];
 
 // initializes all the system EEPROM values. Chances are this should be broken out a bit but
 // there is only one checksum check for all of them so it's simple to do it all here.
 void loadSettings()
 {
     Logger::console("Loading settings....");
-
-    for (int i = 0; i < NUM_BUSES; i++)
-        canBuses[i] = nullptr;
 
     nvPrefs.begin(PREF_NAME, false);
 
@@ -128,7 +126,7 @@ void loadSettings()
 
     if (settings.systemType == 0)
     {
-        canBuses[0] = &CAN0;
+        // canBuses[0] = &CAN0;
         SysSettings.logToggle = false;
         SysSettings.txToggle = true;
         SysSettings.rxToggle = true;
@@ -141,7 +139,7 @@ void loadSettings()
         SysSettings.isWifiConnected = false;
         strcpy(otaHost, "");
         strcpy(otaFilename, "");
-        CAN0.setCANPins(GPIO_NUM_26, GPIO_NUM_27);
+        // CAN0.setCANPins(GPIO_NUM_26, GPIO_NUM_27);
     }
 
     if (nvPrefs.getString("SSID", settings.SSID, 32) == 0)

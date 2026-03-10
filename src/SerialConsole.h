@@ -30,7 +30,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "config.h"
 #include "sys_io.h"
 // #include "ESP32RET.h"
-#include "esp32_can.h"
+#include "can_driver.h"
 
 class SerialConsole {
 public:
@@ -54,7 +54,7 @@ private:
     void handleShortCmd();
     void handleConfigCmd();
     bool handleFilterSet(uint8_t bus, uint8_t filter, char *values);
-    bool handleCANSend(CAN_COMMON &port, char *inputString);
+    bool handleCANSend(char *inputString);
     bool handleSWCANSend(char *inputString);
 };
 

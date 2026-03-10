@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 #include "config.h"
-#include "esp32_can.h"
+#include "can_driver.h"
 #include "commbuffer.h"
 
 enum STATE {

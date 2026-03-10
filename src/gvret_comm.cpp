@@ -6,6 +6,7 @@ Implements handling of the GVRET comm protocol, both sending and receiving
 #include "SerialConsole.h"
 #include "config.h"
 #include "can_manager.h"
+#include "can_driver.h"
 
 GVRET_Comm_Handler::GVRET_Comm_Handler()
 {
@@ -221,7 +222,13 @@ void GVRET_Comm_Handler::processIncomingByte(uint8_t in_byte)
                 // temp8 = checksumCalc(buff, step);
                 build_out_frame.rtr = 0;
                 if (out_bus < NUM_BUSES)
-                    canManager.sendFrame(canBuses[out_bus], build_out_frame);
+                {
+                    can_send(build_out_frame.id,
+                             build_out_frame.extended,
+                             build_out_frame.rtr,
+                             build_out_frame.length,
+                             build_out_frame.data.bytes);
+                }
             }
             break;
         }
@@ -249,12 +256,6 @@ void GVRET_Comm_Handler::processIncomingByte(uint8_t in_byte)
         state = IDLE;
         break;
     case SETUP_CANBUS: // todo: validate checksum
-    
-        if (SysSettings.numBuses == 0 || !canBuses[0])
-        {
-            state = IDLE;
-            return;
-        }
 
         switch (step)
         {
@@ -312,104 +313,16 @@ void GVRET_Comm_Handler::processIncomingByte(uint8_t in_byte)
                 canPauseRX = true;
                 vTaskDelay(pdMS_TO_TICKS(50));
 
-                if (!canBuses[0])
-                {
-                    state = IDLE;
-                    return;
-                }
-
-                canBuses[0]->begin(settings.canSettings[0].nomSpeed, 255);
+                can_set_speed(settings.canSettings[0].nomSpeed);
 
                 canPauseRX = false;
-
-                if (settings.canSettings[0].listenOnly)
-                    canBuses[0]->setListenOnlyMode(true);
-                else
-                    canBuses[0]->setListenOnlyMode(false);
-                canBuses[0]->watchFor();
-            }
-            else
-            {
-                if (canBuses[0])
-                    canBuses[0]->disable();
             }
             break;
         case 4:
-            build_int = in_byte;
-            break;
         case 5:
-            build_int |= in_byte << 8;
-            break;
         case 6:
-            build_int |= in_byte << 16;
-            break;
         case 7:
-            build_int |= in_byte << 24;
-            busSpeed = build_int & 0xFFFFF;
-            if (busSpeed > 1000000)
-                busSpeed = 1000000;
-
-            if (build_int > 0 && SysSettings.numBuses > 1)
-            {
-                if (build_int & 0x80000000ul) // signals that enabled and listen only status are also being passed
-                {
-                    if (build_int & 0x40000000ul)
-                    {
-                        settings.canSettings[1].enabled = true;
-                    }
-                    else
-                    {
-                        settings.canSettings[1].enabled = false;
-                    }
-                    if (build_int & 0x20000000ul)
-                    {
-                        settings.canSettings[1].listenOnly = true;
-                    }
-                    else
-                    {
-                        settings.canSettings[1].listenOnly = false;
-                    }
-                }
-                else
-                {
-                    // if not using extended status mode then just default to enabling - this was old behavior
-                    settings.canSettings[1].enabled = true;
-                }
-                // CAN1.set_baudrate(build_int);
-                settings.canSettings[1].nomSpeed = busSpeed;
-            }
-            else
-            { // disable first canbus
-                settings.canSettings[1].enabled = false;
-            }
-
-            if (settings.canSettings[1].enabled)
-            {
-                canPauseRX = true;
-                vTaskDelay(pdMS_TO_TICKS(50));
-
-                if (!canBuses[1])
-                {
-                    state = IDLE;
-                    return;
-                }
-
-                canBuses[1]->begin(settings.canSettings[1].nomSpeed, 255);
-
-                canPauseRX = false;
-
-                if (settings.canSettings[1].listenOnly)
-                    canBuses[1]->setListenOnlyMode(true);
-                else
-                    canBuses[1]->setListenOnlyMode(false);
-                canBuses[1]->watchFor();
-            }
-            else
-            {
-                if (canBuses[1])
-                    canBuses[1]->disable();
-            }
-
+            // ignore CAN1 configuration
             state = IDLE;
             // now, write out the new canbus settings to EEPROM
             // EEPROM.writeBytes(0, &settings, sizeof(settings));

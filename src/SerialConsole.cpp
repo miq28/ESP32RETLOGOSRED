@@ -30,7 +30,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <esp32_can.h>
+#include "can_driver.h"
 #include <Preferences.h>
 #include "config.h"
 #include "sys_io.h"
@@ -77,11 +77,7 @@ void SerialConsole::printMenu()
     {
         Logger::console("CANEN%i=%i - Enable/Disable CAN%i (0 = Disable, 1 = Enable)", i, settings.canSettings[i].enabled, i);
         Logger::console("CANSPEED%i=%i - Set speed of CAN%i in baud (125000, 250000, etc)", i, settings.canSettings[i].nomSpeed, i);
-        if (canBuses[i]->supportsFDMode())
-        {
-            Logger::console("CANFDRATE%i=%i - FD Data Speed of CAN%i (500000, 2000000, etc)", i, settings.canSettings[i].fdSpeed, i);
-            Logger::console("CANFDMODE%i=%i - Allow FD traffic on CAN%i (0 = Disable, 1 = Enable)", i, settings.canSettings[i].fdMode, i);
-        }
+
         Logger::console("CANLISTENONLY%i=%i - Enable/Disable Listen Only Mode (0 = Dis, 1 = En)", i, settings.canSettings[i].listenOnly);
         Serial.println();
         Logger::console("CANSEND%i=ID,LEN,<BYTES SEPARATED BY COMMAS> - Ex: CAN0SEND=0x200,4,1,2,3,4", i);
@@ -170,15 +166,16 @@ void SerialConsole::handleShortCmd()
         Logger::console("Power cycle to reset to factory defaults");
         break;
     case '~':
-        Serial.println("DEBUGGING MODE!");
+        DEBUGLN("DEBUGGING MODE!");
+        break;
         CAN0.setDebuggingMode(true);
 #if SOC_TWAI_CONTROLLER_NUM == 2 and ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0) or defined(HAS_EXTERNAL_CAN_CONTROLLER)
         CAN1.setDebuggingMode(true);
 #endif
         break;
     case '`':
-        Serial.println("Normal mode");
-        CAN0.setDebuggingMode(false);
+        DEBUGLN("Normal mode");
+        break;
 #if SOC_TWAI_CONTROLLER_NUM == 2 and ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0) or defined(HAS_EXTERNAL_CAN_CONTROLLER)
         CAN1.setDebuggingMode(true);
 #endif
@@ -240,12 +237,8 @@ void SerialConsole::handleConfigCmd()
         settings.canSettings[idx].enabled = newValue;
         if (newValue == 1)
         {
-            // CAN0.enable();
-            canBuses[idx]->begin(settings.canSettings[idx].nomSpeed, 255);
-            canBuses[idx]->watchFor();
+            can_set_speed(settings.canSettings[idx].nomSpeed);
         }
-        else
-            canBuses[idx]->disable();
         writeEEPROM = true;
     }
     else if (cmdString.startsWith("CANSPEED"))
@@ -259,10 +252,10 @@ void SerialConsole::handleConfigCmd()
         {
             Logger::console("Setting CAN%i Nominal Speed to %i", idx, newValue);
             settings.canSettings[idx].nomSpeed = newValue;
+
             if (settings.canSettings[idx].enabled)
             {
-                if (settings.canSettings[idx].fdMode)
-                    canBuses[idx]->begin(settings.canSettings[idx].nomSpeed, settings.canSettings[idx].fdSpeed);
+                can_set_speed(settings.canSettings[idx].nomSpeed);
             }
             writeEEPROM = true;
         }
@@ -276,22 +269,6 @@ void SerialConsole::handleConfigCmd()
             idx = 0;
         if (idx > (SysSettings.numBuses - 1))
             idx = SysSettings.numBuses - 1;
-        if (canBuses[idx]->supportsFDMode())
-        {
-            if (newValue > 499999 && newValue <= 8000000)
-            {
-                Logger::console("Setting CAN%i FD Rate to %i", idx, newValue);
-                settings.canSettings[idx].fdSpeed = newValue;
-                if (settings.canSettings[idx].enabled)
-                {
-                    if (settings.canSettings[idx].fdMode)
-                        canBuses[idx]->beginFD(settings.canSettings[idx].nomSpeed, settings.canSettings[idx].fdSpeed);
-                }
-                writeEEPROM = true;
-            }
-            else
-                Logger::console("Invalid baud rate! Enter a value 500000 - 8000000");
-        }
     }
     else if (cmdString.startsWith("CANFDMODE"))
     {
@@ -300,21 +277,6 @@ void SerialConsole::handleConfigCmd()
             idx = 0;
         if (idx > (SysSettings.numBuses - 1))
             idx = SysSettings.numBuses - 1;
-        if (canBuses[idx]->supportsFDMode())
-        {
-            if (newValue >= 0 && newValue <= 1)
-            {
-                Logger::console("Setting CAN%i FD Mode to %i", idx, newValue);
-                settings.canSettings[idx].fdMode = newValue;
-                if (settings.canSettings[idx].fdMode)
-                    canBuses[idx]->beginFD(settings.canSettings[idx].nomSpeed, settings.canSettings[idx].fdSpeed);
-                else
-                    canBuses[idx]->begin(settings.canSettings[idx].nomSpeed, 255);
-                writeEEPROM = true;
-            }
-            else
-                Logger::console("Invalid setting! Enter a value 0 - 1");
-        }
     }
     else if (cmdString.startsWith("CANLISTENONLY"))
     {
@@ -329,11 +291,11 @@ void SerialConsole::handleConfigCmd()
             settings.canSettings[idx].listenOnly = newValue;
             if (settings.canSettings[idx].listenOnly)
             {
-                canBuses[idx]->setListenOnlyMode(true);
+                // listen-only not implemented yet
             }
             else
             {
-                canBuses[idx]->setListenOnlyMode(false);
+                // listen-only not implemented yet
             }
             writeEEPROM = true;
         }
@@ -426,7 +388,7 @@ void SerialConsole::handleConfigCmd()
             idx = 0;
         if (idx > (SysSettings.numBuses - 1))
             idx = SysSettings.numBuses - 1;
-        handleCANSend(*canBuses[idx], newString);
+        handleCANSend(newString);
     }
     else if (cmdString == String("MARK"))
     { // just ascii based for now
@@ -633,7 +595,7 @@ bool SerialConsole::handleFilterSet(uint8_t bus, uint8_t filter, char *values)
     return true;
 }
 
-bool SerialConsole::handleCANSend(CAN_COMMON &port, char *inputString)
+bool SerialConsole::handleCANSend(char *inputString)
 {
     char *idTok = strtok(inputString, ",");
     char *lenTok = strtok(NULL, ",");
@@ -664,7 +626,7 @@ bool SerialConsole::handleCANSend(CAN_COMMON &port, char *inputString)
         frame.extended = false;
     frame.rtr = 0;
     frame.length = lenVal;
-    port.sendFrame(frame);
+    can_send(frame.id, frame.extended, frame.rtr, frame.length, frame.data.byte);
 
     Logger::console("Sending frame with id: 0x%x len: %i", frame.id, frame.length);
     SysSettings.txToggle = !SysSettings.txToggle;

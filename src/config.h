@@ -230,6 +230,6 @@ extern ELM327Emu elmEmulator;
 extern char deviceName[20];
 extern char otaHost[40];
 extern char otaFilename[100];
-extern CAN_COMMON *canBuses[NUM_BUSES];
+// extern CAN_COMMON *canBuses[NUM_BUSES];
 
 #endif /* CONFIG_H_ */

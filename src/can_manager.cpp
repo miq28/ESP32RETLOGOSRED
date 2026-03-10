@@ -2,7 +2,8 @@
 #include "config.h"
 #include "can_manager.h"
 #include "led_manager.h"
-#include "esp32_can.h"
+// #include "esp32_can.h"
+#include "can_driver.h"
 #include "SerialConsole.h"
 #include "gvret_comm.h"
 #include "lawicel.h"
@@ -45,11 +46,11 @@ static inline void pushFrame(const CAN_FRAME &frame, uint8_t bus)
 
     if (next == ringTail)
     {
-        ringOverflowCount = ringOverflowCount + 1; // count overflow
-        return;                                    // drop newest
+        ringOverflowCount++; // count overflow
+        return;              // drop newest
     }
 
-    canRing[ringHead].timestamp = micros();
+    // canRing[ringHead].timestamp = micros();
     canRing[ringHead].bus = bus;
     canRing[ringHead].frame = frame;
 
@@ -62,57 +63,11 @@ CANManager::CANManager()
 
 void CANManager::setup()
 {
-    for (int i = 0; i < SysSettings.numBuses; i++)
-    {
-        if (settings.canSettings[i].enabled)
-        {
-            canBuses[i]->enable();
-            if ((settings.canSettings[i].fdMode == 0) || !canBuses[i]->supportsFDMode())
-            {
-                canBuses[i]->begin(settings.canSettings[i].nomSpeed, 255);
-                DEBUG("Enabled CAN%u with speed %u\n", i, settings.canSettings[i].nomSpeed);
-                if ((i == 0) && (settings.systemType == 2))
-                {
-                    digitalWrite(SW_EN, HIGH); // MUST be HIGH to use CAN0 channel
-                    DEBUG("Enabling SWCAN Mode\n");
-                }
-                if ((i == 1) && (settings.systemType == 2))
-                {
-                    digitalWrite(SW_EN, LOW); // MUST be LOW to use CAN1 channel
-                    DEBUG("Enabling CAN1 will force CAN0 off.\n");
-                }
-            }
-            else
-            {
-                canBuses[i]->beginFD(settings.canSettings[i].nomSpeed, settings.canSettings[i].fdSpeed);
-                DEBUG("Enabled CAN%u In FD Mode With Nominal Speed %u and Data Speed %u",
-                      i, settings.canSettings[i].nomSpeed, settings.canSettings[i].fdSpeed);
-            }
+    can_init(settings.canSettings[0].nomSpeed);
 
-            if (settings.canSettings[i].listenOnly)
-            {
-                canBuses[i]->setListenOnlyMode(true);
-            }
-            else
-            {
-                canBuses[i]->setListenOnlyMode(false);
-            }
-            canBuses[i]->watchFor();
-        }
-        else
-        {
-            canBuses[i]->disable();
-        }
-    }
-
-    for (int j = 0; j < NUM_BUSES; j++)
-    {
-        busLoad[j].bitsPerQuarter = settings.canSettings[j].nomSpeed / 4;
-        busLoad[j].bitsSoFar = 0;
-        busLoad[j].busloadPercentage = 0;
-        if (busLoad[j].bitsPerQuarter == 0)
-            busLoad[j].bitsPerQuarter = 125000;
-    }
+    busLoad[0].bitsPerQuarter = settings.canSettings[0].nomSpeed / 4;
+    busLoad[0].bitsSoFar = 0;
+    busLoad[0].busloadPercentage = 0;
 
     busLoadTimer = millis();
 }
@@ -141,22 +96,8 @@ void CANManager::addBits(int offset, CAN_FRAME_FD &frame)
 
 void CANManager::sendFrame(CAN_COMMON *bus, CAN_FRAME &frame)
 {
-    int whichBus = 0;
-    for (int i = 0; i < NUM_BUSES; i++)
-        if (canBuses[i] == bus)
-            whichBus = i;
-    bus->sendFrame(frame);
-    addBits(whichBus, frame);
-}
-
-void CANManager::sendFrame(CAN_COMMON *bus, CAN_FRAME_FD &frame)
-{
-    int whichBus = 0;
-    for (int i = 0; i < NUM_BUSES; i++)
-        if (canBuses[i] == bus)
-            whichBus = i;
-    bus->sendFrameFD(frame);
-    addBits(whichBus, frame);
+    can_send(frame.id, frame.extended, frame.rtr, frame.length, frame.data.byte);
+    addBits(0, frame);
 }
 
 void CANManager::displayFrame(CAN_FRAME &frame, int whichBus)
@@ -164,21 +105,6 @@ void CANManager::displayFrame(CAN_FRAME &frame, int whichBus)
     if (settings.enableLawicel && SysSettings.lawicelMode)
     {
         lawicel.sendFrameToBuffer(frame, whichBus);
-    }
-    else
-    {
-        if (SysSettings.isWifiActive)
-            wifiGVRET.sendFrameToBuffer(frame, whichBus);
-        else
-            serialGVRET.sendFrameToBuffer(frame, whichBus);
-    }
-}
-
-void CANManager::displayFrame(CAN_FRAME_FD &frame, int whichBus)
-{
-    if (settings.enableLawicel && SysSettings.lawicelMode)
-    {
-        // lawicel.sendFrameToBuffer(frame, whichBus);
     }
     else
     {
@@ -301,41 +227,42 @@ void transportTask(void *arg)
 
 void canRxTask(void *arg)
 {
-    CAN_FRAME incoming;
+    twai_status_info_t status;
+
+    twai_get_status_info(&status);
+
+    DEBUG("TWAI state=%d\n", status.state);
+
+    twai_message_t msg;
+    CAN_FRAME frame;
 
     while (true)
     {
         if (canPauseRX)
         {
-            vTaskDelay(5);
+            vTaskDelay(pdMS_TO_TICKS(5));
             continue;
         }
 
-        for (int i = 0; i < NUM_BUSES; i++)
+        if (twai_receive(&msg, pdMS_TO_TICKS(1)) == ESP_OK)
         {
-            if (i >= SysSettings.numBuses)
-                continue;
-
-            CAN_COMMON *bus = canBuses[i];
-
-            if (!bus)
-                continue;
-            if (!settings.canSettings[i].enabled)
-                continue;
-
-            if (bus->available() > 0)
+            do
             {
+                // process frame
                 ledNotifyCanActivity();
 
-                if (bus->read(incoming))
-                {
-                    canManager.addBits(i, incoming);
-                    pushFrame(incoming, i);
-                    frameCounter[i] = frameCounter[i] + 1;
-                }
-            }
-        }
+                frame.id = msg.identifier;
+                frame.extended = msg.extd;
+                frame.rtr = msg.rtr;
+                frame.length = msg.data_length_code;
 
-        vTaskDelay(1); // critical: do NOT use taskYIELD here
+                for (int i = 0; i < frame.length; i++)
+                    frame.data.byte[i] = msg.data[i];
+
+                canManager.addBits(0, frame);
+                pushFrame(frame, 0);
+                frameCounter[0]++;
+            } while (twai_receive(&msg, 0) == ESP_OK);
+        }
     }
 }

@@ -13,6 +13,9 @@ volatile bool canPauseRX = false;
 
 #define CAN_RING_SIZE 1024 // 512 // increase if needed (RAM cost ~ 32KB)
 
+#define CAN_RX_STACK 4096
+#define CAN_TX_STACK 6144
+
 static volatile uint32_t ringOverflowCount = 0;
 
 // FPS counter for debugging purposes
@@ -80,13 +83,40 @@ CANManager::CANManager()
 
 void CANManager::setup()
 {
-    can_init(settings.canSettings[0].nomSpeed);
+    if (!can_init(settings.canSettings[0].nomSpeed))
+    {
+        DEBUG("CAN init failed\n");
+        return;
+    }
 
     busLoad[0].bitsPerQuarter = settings.canSettings[0].nomSpeed / 4;
     busLoad[0].bitsSoFar = 0;
     busLoad[0].busloadPercentage = 0;
 
     busLoadTimer = millis();
+
+    // allow TWAI driver to stabilize
+    delay(200);
+
+    // Create CAN_RX task (Core 1)
+    xTaskCreatePinnedToCore(
+        canRxTask,
+        "CAN_RX",
+        CAN_RX_STACK,
+        NULL,
+        3,
+        NULL,
+        1);
+
+    // Create CAN_TX task (Core 0)
+    xTaskCreatePinnedToCore(
+        transportTask,
+        "CAN_TX",
+        CAN_TX_STACK,
+        NULL,
+        2,
+        NULL,
+        0);
 }
 
 void CANManager::addBits(int offset, CAN_FRAME &frame)

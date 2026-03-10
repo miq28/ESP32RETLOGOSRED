@@ -44,9 +44,6 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 SemaphoreHandle_t serialMutex;
 
-// Define the WDT timeout in seconds
-#define WDT_TIMEOUT 10
-
 // Converts reason type to a C string.
 // Type is located in /tools/sdk/esp32/include/esp_system/include/esp_system.h
 const char *resetReasonName(esp_reset_reason_t r)
@@ -216,22 +213,6 @@ void setup()
 
     ledInit(20); // 0-255 set brightness
 
-    // // 1. Ensure any previous watchdog config is removed
-    // esp_task_wdt_deinit();
-
-    // // 2. Define the configuration structure
-    // esp_task_wdt_config_t wdt_config = {
-    //     .timeout_ms = WDT_TIMEOUT * 1000, // Convert seconds to milliseconds
-    //     .idle_core_mask = (1 << 0) | (1 << 1),// Monitor idle tasks on both cores
-    //     .trigger_panic = true // Trigger a panic if the WDT timeout occurs
-    // };
-
-    // // 3. Initialize the WDT with the configuration structure
-    // ESP_ERROR_CHECK(esp_task_wdt_init(&wdt_config));
-
-    // // 4. Add current task (loopTask) to be watched
-    // esp_task_wdt_add(NULL);
-
     SysSettings.isWifiConnected = false;
 
     loadSettings();
@@ -255,29 +236,6 @@ void setup()
     Serial.println("");
 
     canManager.setup();
-
-    // allow system to stabilize before creating tasks
-    delay(200);
-
-    // Create CAN RX task (Core 1)
-    xTaskCreatePinnedToCore(
-        canRxTask,
-        "canRxTask",
-        4096,
-        NULL,
-        3,
-        NULL,
-        1);
-
-    // Create transport task (Core 0)
-    xTaskCreatePinnedToCore(
-        transportTask,
-        "transportTask",
-        6144,
-        NULL,
-        2,
-        NULL,
-        0);
 
     SysSettings.lawicelMode = false;
     SysSettings.lawicelAutoPoll = false;
@@ -315,15 +273,16 @@ void loop()
     size_t serialLength = serialGVRET.numAvailableBytes();
     size_t maxLength = (wifiLength > serialLength) ? wifiLength : serialLength;
 
-    if ((micros() - lastFlushMicros > SER_BUFF_FLUSH_INTERVAL) || (maxLength > (WIFI_BUFF_SIZE - 40)))
+    if ((micros() - lastFlushMicros > 4000) || (maxLength > 512))
     {
-        // Serial.printf("wifiLength: %d and serialLength: %d\n", wifiLength, serialLength);
         lastFlushMicros = micros();
+
         if (serialLength > 0)
         {
             Serial.write(serialGVRET.getBufferedBytes(), serialLength);
             serialGVRET.clearBufferedBytes();
         }
+
         if (wifiLength > 0)
         {
             wifiManager.sendBufferedData();

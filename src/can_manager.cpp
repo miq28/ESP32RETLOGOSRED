@@ -2,7 +2,6 @@
 #include "config.h"
 #include "can_manager.h"
 #include "led_manager.h"
-// #include "esp32_can.h"
 #include "can_driver.h"
 #include "SerialConsole.h"
 #include "gvret_comm.h"

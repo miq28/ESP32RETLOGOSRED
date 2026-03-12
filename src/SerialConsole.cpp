@@ -168,11 +168,7 @@ void SerialConsole::handleShortCmd()
     case '~':
         DEBUGLN("DEBUGGING MODE!");
         break;
-        CAN0.setDebuggingMode(true);
-#if SOC_TWAI_CONTROLLER_NUM == 2 and ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0) or defined(HAS_EXTERNAL_CAN_CONTROLLER)
-        CAN1.setDebuggingMode(true);
-#endif
-        break;
+
     case '`':
         DEBUGLN("Normal mode");
         break;
@@ -599,37 +595,61 @@ bool SerialConsole::handleCANSend(char *inputString)
 {
     char *idTok = strtok(inputString, ",");
     char *lenTok = strtok(NULL, ",");
+    char *thirdTok = strtok(NULL, ",");   // could be EXT or first data byte
     char *dataTok;
-    CAN_FRAME frame;
 
-    if (!idTok)
-        return false;
-    if (!lenTok)
-        return false;
+    if (!idTok) return false;
+    if (!lenTok) return false;
 
-    int idVal = strtol(idTok, NULL, 0);
-    int lenVal = strtol(lenTok, NULL, 0);
+    uint32_t id = strtol(idTok, NULL, 0);
 
-    for (int i = 0; i < lenVal; i++)
+    long lenVal = strtol(lenTok, NULL, 0);
+    if (lenVal < 0) lenVal = 0;
+    if (lenVal > 8) lenVal = 8;
+    uint8_t len = (uint8_t)lenVal;
+
+    bool extended;
+    uint8_t data[8];
+
+    /* Detect whether EXT field is present */
+    if (thirdTok && (strcmp(thirdTok,"0")==0 || strcmp(thirdTok,"1")==0))
     {
-        dataTok = strtok(NULL, ",");
-        if (!dataTok)
-            return false;
-        frame.data.byte[i] = strtol(dataTok, NULL, 0);
+        /* New format: ID,LEN,EXT,DATA... */
+        extended = strtol(thirdTok, NULL, 0) ? true : false;
+
+        for (int i = 0; i < len; i++)
+        {
+            dataTok = strtok(NULL, ",");
+            if (!dataTok) return false;
+            data[i] = strtol(dataTok, NULL, 0);
+        }
+    }
+    else
+    {
+        /* Old format: ID,LEN,DATA... */
+        extended = (id > 0x7FF);
+
+        if (!thirdTok) return false;
+        data[0] = strtol(thirdTok, NULL, 0);
+
+        for (int i = 1; i < len; i++)
+        {
+            dataTok = strtok(NULL, ",");
+            if (!dataTok) return false;
+            data[i] = strtol(dataTok, NULL, 0);
+        }
     }
 
-    // things seem good so try to send the frame.
-    frame.id = idVal;
-    if (idVal >= 0x7FF)
-        frame.extended = true;
-    else
-        frame.extended = false;
-    frame.rtr = 0;
-    frame.length = lenVal;
-    can_send(frame.id, frame.extended, frame.rtr, frame.length, frame.data.byte);
+    bool rtr = false;
 
-    Logger::console("Sending frame with id: 0x%x len: %i", frame.id, frame.length);
+    can_send(id, extended, rtr, len, data);
+
+    Logger::console("Sending %s frame id: 0x%x len: %i",
+                    extended ? "EXT" : "STD",
+                    id, len);
+
     SysSettings.txToggle = !SysSettings.txToggle;
+
     return true;
 }
 

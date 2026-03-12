@@ -3,6 +3,7 @@
 #include "can_manager.h"
 #include "led_manager.h"
 #include "can_driver.h"
+#include "can_frame.h"
 #include "SerialConsole.h"
 #include "gvret_comm.h"
 #include "lawicel.h"
@@ -129,28 +130,32 @@ void CANManager::addBits(int offset, CAN_FRAME &frame)
         busLoad[offset].bitsSoFar += 18;
 }
 
-void CANManager::addBits(int offset, CAN_FRAME_FD &frame)
-{
-    if (offset < 0)
-        return;
-    if (offset >= NUM_BUSES)
-        return;
-    busLoad[offset].bitsSoFar += 41 + (frame.length * 9);
-    if (frame.extended)
-        busLoad[offset].bitsSoFar += 18;
-}
+// void CANManager::addBits(int offset, CAN_FRAME_FD &frame)
+// {
+//     if (offset < 0)
+//         return;
+//     if (offset >= NUM_BUSES)
+//         return;
+//     busLoad[offset].bitsSoFar += 41 + (frame.length * 9);
+//     if (frame.extended)
+//         busLoad[offset].bitsSoFar += 18;
+// }
 
-void CANManager::sendFrame(CAN_COMMON *bus, CAN_FRAME &frame)
+void CANManager::sendFrame(CAN_FRAME &frame)
 {
-    can_send(frame.id, frame.extended, frame.rtr, frame.length, frame.data.byte);
-    addBits(0, frame);
+    can_send(frame.id, frame.extended, frame.rtr, frame.length, frame.data);
 }
 
 void CANManager::displayFrame(CAN_FRAME &frame, int whichBus)
 {
     if (settings.enableLawicel && SysSettings.lawicelMode)
     {
-        lawicel.sendFrameToBuffer(frame, whichBus);
+        lawicel.sendFrameToBuffer(
+            frame.id,
+            frame.extended,
+            frame.length,
+            frame.data,
+            whichBus);
     }
     else
     {
@@ -164,7 +169,7 @@ void CANManager::displayFrame(CAN_FRAME &frame, int whichBus)
 void CANManager::loop()
 {
     CAN_FRAME incoming;
-    CAN_FRAME_FD inFD;
+    // CAN_FRAME_FD inFD;
     // size_t wifiLength = wifiGVRET.numAvailableBytes();
     // size_t serialLength = serialGVRET.numAvailableBytes();
     // size_t maxLength = (wifiLength > serialLength) ? wifiLength : serialLength;
@@ -205,7 +210,12 @@ void transportTask(void *arg)
             RingItem &item = canRing[ringTail];
 
             if (lawicelMode)
-                lawicel.sendFrameToBuffer(item.frame, item.bus);
+                lawicel.sendFrameToBuffer(
+                    item.frame.id,
+                    item.frame.extended,
+                    item.frame.length,
+                    item.frame.data,
+                    item.bus);
             else if (wifi)
                 wifiGVRET.sendFrameToBuffer(item.frame, item.bus);
             else
@@ -314,7 +324,7 @@ void canRxTask(void *arg)
                 frame.length = msg.data_length_code;
 
                 for (int i = 0; i < frame.length; i++)
-                    frame.data.byte[i] = msg.data[i];
+                    frame.data[i] = msg.data[i];
 
                 canManager.addBits(0, frame);
                 pushFrame(frame, 0);

@@ -33,7 +33,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <Arduino.h>
 #include <WiFi.h>
-#include "esp32_can.h"
+// #include "esp32_can.h"
 #include <Preferences.h>
 #include "rs485.h"
 #include "led_manager.h"

@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include "config.h"
 #include "can_driver.h"
+#include "can_frame.h"
 #include "commbuffer.h"
 
 enum STATE {
@@ -51,7 +52,7 @@ public:
     
 private:
     CAN_FRAME build_out_frame;
-    CAN_FRAME_FD build_out_fd_frame;
+    // CAN_FRAME_FD build_out_fd_frame;
     int out_bus;
     uint8_t buff[20];
     int step;

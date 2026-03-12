@@ -35,7 +35,8 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "config.h"
 #include "Logger.h"
 #include "utility.h"
-#include "esp32_can.h"
+#include "can_driver.h"
+#include "can_frame.h"
 #include "can_manager.h"
 
 /*
@@ -323,11 +324,11 @@ String ELM327Emu::processELMCmd(char *cmd)
         outFrame.extended = false;
         outFrame.length = 8;
         outFrame.rtr = 0;
-        outFrame.data.byte[3] = 0xAA;
-        outFrame.data.byte[4] = 0xAA;
-        outFrame.data.byte[5] = 0xAA;
-        outFrame.data.byte[6] = 0xAA;
-        outFrame.data.byte[7] = 0xAA;
+        outFrame.data[3] = 0xAA;
+        outFrame.data[4] = 0xAA;
+        outFrame.data[5] = 0xAA;
+        outFrame.data[6] = 0xAA;
+        outFrame.data[7] = 0xAA;
         size_t cmdSize = strlen(cmd);
         if (cmdSize == 4) // generic OBDII codes
         {
@@ -335,9 +336,9 @@ String ELM327Emu::processELMCmd(char *cmd)
             uint8_t pidnum = (uint8_t)(valu & 0xFF);
             uint8_t mode = (uint8_t)((valu >> 8) & 0xFF);
             Logger::debug("Mode: %i, PID: %i", mode, pidnum);
-            outFrame.data.byte[0] = 2;
-            outFrame.data.byte[1] = mode;
-            outFrame.data.byte[2] = pidnum;
+            outFrame.data[0] = 2;
+            outFrame.data[1] = mode;
+            outFrame.data[2] = pidnum;
         }
         if (cmdSize == 6) // custom PIDs for specific vehicles
         {
@@ -345,13 +346,13 @@ String ELM327Emu::processELMCmd(char *cmd)
             uint16_t pidnum = (uint8_t)(valu & 0xFFFF);
             uint8_t mode = (uint8_t)((valu >> 16) & 0xFF);
             Logger::debug("Mode: %i, PID: %i", mode, pidnum);
-            outFrame.data.byte[0] = 3;
-            outFrame.data.byte[1] = mode;
-            outFrame.data.byte[2] = pidnum >> 8;
-            outFrame.data.byte[3] = pidnum & 0xFF;
+            outFrame.data[0] = 3;
+            outFrame.data[1] = mode;
+            outFrame.data[2] = pidnum >> 8;
+            outFrame.data[3] = pidnum & 0xFF;
         }
 
-        canManager.sendFrame(&CAN0, outFrame);
+        canManager.sendFrame(outFrame);
     }
 
     retString.concat(lineEnding);
@@ -375,9 +376,9 @@ void ELM327Emu::processCANReply(CAN_FRAME &frame)
         sprintf(buff, "%u", frame.length);
         txBuffer.sendString(buff);
     }
-    for (int i = 0; i < frame.data.byte[0]; i++)
+    for (int i = 0; i < frame.data[0]; i++)
     {
-        sprintf(buff, "%02X", frame.data.byte[1 + i]);
+        sprintf(buff, "%02X", frame.data[1 + i]);
         txBuffer.sendString(buff);
     }
     sendTxBuffer();

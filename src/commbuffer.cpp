@@ -103,7 +103,7 @@ void CommBuffer::sendFrameToBuffer(CAN_FRAME &frame, int whichBus)
             (dlc & 0x0F) | ((whichBus & 0x0F) << 4);
 
         for (int c = 0; c < dlc; c++)
-            transmitBuffer[transmitBufferLength++] = frame.data.uint8[c];
+            transmitBuffer[transmitBufferLength++] = frame.data[c];
 
         temp = 0;
         transmitBuffer[transmitBufferLength++] = temp;
@@ -161,124 +161,7 @@ void CommBuffer::sendFrameToBuffer(CAN_FRAME &frame, int whichBus)
                 (char *)&transmitBuffer[transmitBufferLength],
                 remaining,
                 " %x",
-                frame.data.uint8[c]);
-
-            if (writtenBytes >= remaining)
-                return;
-            transmitBufferLength += writtenBytes;
-        }
-
-        remaining = WIFI_BUFF_SIZE - transmitBufferLength;
-        if (remaining < 3)
-            return;
-
-        writtenBytes = snprintf(
-            (char *)&transmitBuffer[transmitBufferLength],
-            remaining,
-            "\r\n");
-
-        if (writtenBytes < remaining)
-            transmitBufferLength += writtenBytes;
-    }
-}
-
-void CommBuffer::sendFrameToBuffer(CAN_FRAME_FD &frame, int whichBus)
-{
-    uint8_t temp;
-    size_t writtenBytes;
-
-    if (settings.useBinarySerialComm)
-    {
-        uint8_t dlc = frame.length & 0x3F; // CAN FD allows up to 64 bytes
-
-        size_t frameSize = 13 + dlc;
-
-        if (transmitBufferLength + frameSize >= WIFI_BUFF_SIZE)
-        {
-            gvretDroppedFrames++;
-            return;
-        }
-
-        transmitBuffer[transmitBufferLength++] = 0xF1;
-        transmitBuffer[transmitBufferLength++] = PROTO_BUILD_FD_FRAME;
-
-        uint32_t now = micros();
-
-        transmitBuffer[transmitBufferLength++] = (uint8_t)now;
-        transmitBuffer[transmitBufferLength++] = (uint8_t)(now >> 8);
-        transmitBuffer[transmitBufferLength++] = (uint8_t)(now >> 16);
-        transmitBuffer[transmitBufferLength++] = (uint8_t)(now >> 24);
-
-        uint32_t id = frame.id;
-        if (frame.extended)
-            id |= 0x80000000;
-
-        transmitBuffer[transmitBufferLength++] = (uint8_t)id;
-        transmitBuffer[transmitBufferLength++] = (uint8_t)(id >> 8);
-        transmitBuffer[transmitBufferLength++] = (uint8_t)(id >> 16);
-        transmitBuffer[transmitBufferLength++] = (uint8_t)(id >> 24);
-
-        transmitBuffer[transmitBufferLength++] = dlc;
-        transmitBuffer[transmitBufferLength++] = (uint8_t)(whichBus & 0x0F);
-
-        for (int c = 0; c < dlc; c++)
-            transmitBuffer[transmitBufferLength++] = frame.data.uint8[c];
-
-        temp = 0;
-        transmitBuffer[transmitBufferLength++] = temp;
-    }
-    else
-    {
-        size_t remaining = WIFI_BUFF_SIZE - transmitBufferLength;
-        if (remaining == 0)
-            return;
-
-        writtenBytes = snprintf(
-            (char *)&transmitBuffer[transmitBufferLength],
-            remaining,
-            "%lu - %lx",
-            micros(),
-            frame.id);
-
-        if (writtenBytes >= remaining)
-            return;
-        transmitBufferLength += writtenBytes;
-
-        remaining = WIFI_BUFF_SIZE - transmitBufferLength;
-
-        writtenBytes = snprintf(
-            (char *)&transmitBuffer[transmitBufferLength],
-            remaining,
-            frame.extended ? " X " : " S ");
-
-        if (writtenBytes >= remaining)
-            return;
-        transmitBufferLength += writtenBytes;
-
-        remaining = WIFI_BUFF_SIZE - transmitBufferLength;
-
-        writtenBytes = snprintf(
-            (char *)&transmitBuffer[transmitBufferLength],
-            remaining,
-            "%d %d",
-            whichBus,
-            frame.length);
-
-        if (writtenBytes >= remaining)
-            return;
-        transmitBufferLength += writtenBytes;
-
-        for (int c = 0; c < frame.length; c++)
-        {
-            remaining = WIFI_BUFF_SIZE - transmitBufferLength;
-            if (remaining == 0)
-                return;
-
-            writtenBytes = snprintf(
-                (char *)&transmitBuffer[transmitBufferLength],
-                remaining,
-                " %x",
-                frame.data.uint8[c]);
+                frame.data[c]);
 
             if (writtenBytes >= remaining)
                 return;

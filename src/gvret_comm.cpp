@@ -6,7 +6,6 @@ Implements handling of the GVRET comm protocol, both sending and receiving
 #include "SerialConsole.h"
 #include "config.h"
 #include "can_manager.h"
-#include "can_driver.h"
 
 GVRET_Comm_Handler::GVRET_Comm_Handler()
 {
@@ -213,7 +212,7 @@ void GVRET_Comm_Handler::processIncomingByte(uint8_t in_byte)
         default:
             if (step < build_out_frame.length + 6)
             {
-                build_out_frame.data.uint8[step - 6] = in_byte;
+                build_out_frame.data[step - 6] = in_byte;
             }
             else
             {
@@ -227,7 +226,7 @@ void GVRET_Comm_Handler::processIncomingByte(uint8_t in_byte)
                              build_out_frame.extended,
                              build_out_frame.rtr,
                              build_out_frame.length,
-                             build_out_frame.data.bytes);
+                             build_out_frame.data);
                 }
             }
             break;
@@ -390,7 +389,7 @@ void GVRET_Comm_Handler::processIncomingByte(uint8_t in_byte)
         default:
             if (step < build_out_frame.length + 6)
             {
-                build_out_frame.data.bytes[step - 6] = in_byte;
+                build_out_frame.data[step - 6] = in_byte;
             }
             else
             {

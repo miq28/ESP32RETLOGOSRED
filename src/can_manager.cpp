@@ -16,10 +16,10 @@ volatile bool canPauseRX = false;
 #define CAN_RX_STACK 4096
 #define CAN_TX_STACK 6144
 
-static volatile uint32_t ringOverflowCount = 0;
+static uint32_t ringOverflowCount = 0;
 
 // FPS counter for debugging purposes
-static volatile uint32_t frameCounter[NUM_BUSES] = {0};
+static uint32_t frameCounter[NUM_BUSES] = {0};
 static volatile uint32_t lastFPS[NUM_BUSES] = {0};
 
 // Track TWAI RX queue high-water mark
@@ -28,7 +28,7 @@ static volatile uint32_t twaiRxQueueFullEvents = 0;
 // Track ring buffer high-water mark
 static volatile uint16_t ringHighWater = 0;
 // Track transport throughput
-static volatile uint32_t transportFrames = 0;
+static uint32_t transportFrames = 0;
 
 struct RingItem
 {
@@ -119,31 +119,13 @@ void CANManager::setup()
         0);
 }
 
-void CANManager::addBits(int offset, CAN_FRAME &frame)
-{
-    if (offset < 0)
-        return;
-    if (offset >= NUM_BUSES)
-        return;
-    busLoad[offset].bitsSoFar += 41 + (frame.length * 9);
-    if (frame.extended)
-        busLoad[offset].bitsSoFar += 18;
-}
-
-// void CANManager::addBits(int offset, CAN_FRAME_FD &frame)
-// {
-//     if (offset < 0)
-//         return;
-//     if (offset >= NUM_BUSES)
-//         return;
-//     busLoad[offset].bitsSoFar += 41 + (frame.length * 9);
-//     if (frame.extended)
-//         busLoad[offset].bitsSoFar += 18;
-// }
-
 void CANManager::sendFrame(CAN_FRAME &frame)
 {
-    can_send(frame.id, frame.extended, frame.rtr, frame.length, frame.data);
+    can_send(frame.id,
+             frame.extended,
+             frame.rtr,
+             frame.length,
+             frame.data);
 }
 
 void CANManager::displayFrame(CAN_FRAME &frame, int whichBus)
@@ -196,34 +178,45 @@ void CANManager::loop()
 
 void transportTask(void *arg)
 {
-    const int MAX_BATCH = 12;
+    const int MAX_BATCH = 32;
 
     while (true)
     {
         int batch = 0;
 
-        bool lawicelMode = settings.enableLawicel && SysSettings.lawicelMode;
-        bool wifi = SysSettings.isWifiActive;
-
         while (!ringIsEmpty() && batch < MAX_BATCH)
         {
-            RingItem &item = canRing[ringTail];
+            // RingItem &item = canRing[ringTail];
 
-            if (lawicelMode)
+            // if (settings.enableLawicel && SysSettings.lawicelMode)
+            //     lawicel.sendFrameToBuffer(
+            //         item.frame.id,
+            //         item.frame.extended,
+            //         item.frame.length,
+            //         item.frame.data,
+            //         item.bus);
+            // else if (SysSettings.isWifiActive)
+            //     wifiGVRET.sendFrameToBuffer(item.frame, item.bus);
+            // else
+            //     serialGVRET.sendFrameToBuffer(item.frame, item.bus);
+
+            RingItem *item = &canRing[ringTail];
+
+            if (settings.enableLawicel && SysSettings.lawicelMode)
                 lawicel.sendFrameToBuffer(
-                    item.frame.id,
-                    item.frame.extended,
-                    item.frame.length,
-                    item.frame.data,
-                    item.bus);
-            else if (wifi)
-                wifiGVRET.sendFrameToBuffer(item.frame, item.bus);
+                    item->frame.id,
+                    item->frame.extended,
+                    item->frame.length,
+                    item->frame.data,
+                    item->bus);
+            else if (SysSettings.isWifiActive)
+                wifiGVRET.sendFrameToBuffer(item->frame, item->bus);
             else
-                serialGVRET.sendFrameToBuffer(item.frame, item.bus);
+                serialGVRET.sendFrameToBuffer(item->frame, item->bus);
 
             transportFrames++; // ← ADD HERE
 
-            ringTail = (ringTail + 1) % CAN_RING_SIZE;
+            ringTail = (ringTail + 1) & (CAN_RING_SIZE - 1);
             batch++;
         }
 
@@ -242,8 +235,7 @@ void transportTask(void *arg)
             ringOverflowCount = 0;
 
             // print stats: overflows, used, head, tail, free heap
-            uint16_t used =
-                (ringHead >= ringTail) ? (ringHead - ringTail) : (CAN_RING_SIZE - ringTail + ringHead);
+            uint16_t used = (ringHead - ringTail) & (CAN_RING_SIZE - 1);
 
             // print FPS counter
             for (int b = 0; b < SysSettings.numBuses; b++)
@@ -323,10 +315,8 @@ void canRxTask(void *arg)
                 frame.rtr = msg.rtr;
                 frame.length = msg.data_length_code;
 
-                for (int i = 0; i < frame.length; i++)
-                    frame.data[i] = msg.data[i];
+                memcpy(frame.data, msg.data, msg.data_length_code);
 
-                canManager.addBits(0, frame);
                 pushFrame(frame, 0);
 
                 frameCounter[0]++;

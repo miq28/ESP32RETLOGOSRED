@@ -27,7 +27,7 @@ bool can_init(uint32_t speed)
     twai_general_config_t g_config =
         TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, TWAI_MODE_NORMAL);
 
-    g_config.rx_queue_len = 128;
+    g_config.rx_queue_len = 256;
     g_config.tx_queue_len = 16;
 
     twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();

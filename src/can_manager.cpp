@@ -315,23 +315,23 @@ void canRxTask(void *arg)
                 frame.rtr = msg.rtr;
                 frame.length = msg.data_length_code;
 
-                memcpy(frame.data, msg.data, msg.data_length_code);
+                memcpy(frame.data, msg.data, frame.length);
 
                 pushFrame(frame, 0);
 
                 frameCounter[0]++;
 
-                // ---- TWAI queue diagnostics ----
-                if (twai_get_status_info(&st) == ESP_OK)
-                {
-                    if (st.msgs_to_rx > twaiRxQueueHigh)
-                        twaiRxQueueHigh = st.msgs_to_rx;
-
-                    if (st.rx_missed_count > 0)
-                        twaiRxQueueFullEvents += st.rx_missed_count;
-                }
-
             } while (twai_receive(&msg, 0) == ESP_OK);
+
+            /* check queue stats once per burst */
+            if (twai_get_status_info(&st) == ESP_OK)
+            {
+                if (st.msgs_to_rx > twaiRxQueueHigh)
+                    twaiRxQueueHigh = st.msgs_to_rx;
+
+                if (st.rx_missed_count > 0)
+                    twaiRxQueueFullEvents += st.rx_missed_count;
+            }
         }
     }
 }

@@ -31,7 +31,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include "ELM327_Emulator.h"
-// #include "BluetoothSerial.h"
+#include "ble_uart.h"
 #include "config.h"
 #include "Logger.h"
 #include "utility.h"
@@ -53,6 +53,11 @@ ELM327Emu::ELM327Emu()
     bLineFeed = true;
     bMonitorMode = false;
     bDLC = false;
+
+    isotpLen = 0;
+    isotpPos = 0;
+    isotpActive = false;
+    isotpNextSeq = 1;
 }
 
 /*
@@ -60,9 +65,13 @@ ELM327Emu::ELM327Emu()
  */
 void ELM327Emu::setup()
 {
-#if SOC_TWAI_CONTROLLER_NUM == 2 and ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0) or defined(HAS_EXTERNAL_CAN_CONTROLLER)
-    serialBT.begin(settings.btName);
-#endif
+    DEBUGLN("Starting BLE...");
+
+    // #if SOC_TWAI_CONTROLLER_NUM == 2 and ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0) or defined(HAS_EXTERNAL_CAN_CONTROLLER)
+    //     ble.begin(settings.btName);
+    // #endif
+
+    ble.begin(settings.btName);
 }
 
 void ELM327Emu::setWiFiClient(WiFiClient *client)
@@ -102,9 +111,9 @@ void ELM327Emu::loop()
     if (!mClient) // bluetooth
     {
 #ifndef CONFIG_IDF_TARGET_ESP32S3
-        while (serialBT.available())
+        while (ble.available())
         {
-            incoming = serialBT.read();
+            incoming = ble.read();
             if (incoming != -1)
             { // and there is no reason it should be -1
                 if (incoming == 13 || ibWritePtr > 126)
@@ -176,7 +185,8 @@ void ELM327Emu::sendTxBuffer()
     else // bluetooth then
     {
 #ifndef CONFIG_IDF_TARGET_ESP32S3
-        serialBT.write(txBuffer.getBufferedBytes(), txBuffer.numAvailableBytes());
+        ble.write(txBuffer.getBufferedBytes(),
+                  txBuffer.numAvailableBytes());
 #endif
     }
     txBuffer.clearBufferedBytes();
@@ -363,23 +373,55 @@ String ELM327Emu::processELMCmd(char *cmd)
 
 void ELM327Emu::processCANReply(CAN_FRAME &frame)
 {
-    // at the moment assume anything sent here is a legit reply to something we sent. Package it up properly
-    // and send it down the line
-    char buff[8];
-    if (bHeader || bMonitorMode)
-    {
-        sprintf(buff, "%03X", frame.id);
-        txBuffer.sendString(buff);
+    uint8_t pci = frame.data[0];
+    uint8_t type = pci >> 4;
+
+    if(type == 0x0) {                         // Single frame
+        uint8_t len = pci & 0x0F;
+
+        for(int i = 0; i < len; i++) {
+            sprintf(buffer, "%02X", frame.data[1+i]);
+            txBuffer.sendString(buffer);
+        }
+
+        sendTxBuffer();
+        return;
     }
-    if (bDLC)
-    {
-        sprintf(buff, "%u", frame.length);
-        txBuffer.sendString(buff);
+
+    if(type == 0x1) {                         // First frame
+        isotpLen = ((pci & 0x0F) << 8) | frame.data[1];
+        isotpPos = 0;
+        isotpActive = true;
+        isotpNextSeq = 1;
+
+        for(int i=2;i<8;i++)
+            isotpBuffer[isotpPos++] = frame.data[i];
+
+        return;
     }
-    for (int i = 0; i < frame.data[0]; i++)
-    {
-        sprintf(buff, "%02X", frame.data[1 + i]);
-        txBuffer.sendString(buff);
+
+    if(type == 0x2 && isotpActive) {          // Consecutive frame
+        uint8_t seq = pci & 0x0F;
+        if(seq != isotpNextSeq) {
+            isotpActive = false;
+            return;
+        }
+
+        isotpNextSeq = (isotpNextSeq + 1) & 0x0F;
+
+        for(int i=1;i<8;i++) {
+            if(isotpPos < isotpLen)
+                isotpBuffer[isotpPos++] = frame.data[i];
+        }
+
+        if(isotpPos >= isotpLen) {            // Completed message
+            for(int i=0;i<isotpLen;i++) {
+                sprintf(buffer,"%02X",isotpBuffer[i]);
+                txBuffer.sendString(buffer);
+            }
+
+            sendTxBuffer();
+            isotpActive = false;
+        }
     }
-    sendTxBuffer();
 }

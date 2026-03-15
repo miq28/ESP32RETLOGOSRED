@@ -9,6 +9,8 @@
 #include "lawicel.h"
 #include "ELM327_Emulator.h"
 
+extern ELM327Emu elmEmulator;
+
 volatile bool canPauseRX = false;
 
 #define CAN_RING_SIZE 1024 // 512 // increase if needed (RAM cost ~ 32KB)
@@ -186,21 +188,22 @@ void transportTask(void *arg)
 
         while (!ringIsEmpty() && batch < MAX_BATCH)
         {
-            // RingItem &item = canRing[ringTail];
-
-            // if (settings.enableLawicel && SysSettings.lawicelMode)
-            //     lawicel.sendFrameToBuffer(
-            //         item.frame.id,
-            //         item.frame.extended,
-            //         item.frame.length,
-            //         item.frame.data,
-            //         item.bus);
-            // else if (SysSettings.isWifiActive)
-            //     wifiGVRET.sendFrameToBuffer(item.frame, item.bus);
-            // else
-            //     serialGVRET.sendFrameToBuffer(item.frame, item.bus);
-
             RingItem *item = &canRing[ringTail];
+
+            // ---- DEBUG: print CAN frame ----
+            // DEBUG("%03X [%d] ", item->frame.id, item->frame.length);
+            // for (int i = 0; i < item->frame.length; i++)
+            // {
+            //     DEBUG("%02X ", item->frame.data[i]);
+            // }
+            // DEBUG("\n");
+
+            // ---- ELM327 ECU reply forwarding ----
+            // Forward ECU replies to ELM emulator
+            if (item->frame.id >= 0x7E8 && item->frame.id <= 0x7EF)
+            {
+                elmEmulator.processCANReply(item->frame);
+            }
 
             if (settings.enableLawicel && SysSettings.lawicelMode)
                 lawicel.sendFrameToBuffer(

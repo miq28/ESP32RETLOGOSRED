@@ -50,10 +50,7 @@ AT RV (adapter voltage) - Send something like 14.4V
 #define ELM327_H_
 
 #include <Arduino.h>
-
-#ifndef CONFIG_IDF_TARGET_ESP32S3
-    #include "BluetoothSerial.h"
-#endif
+#include "ble_uart.h"
 #include <WiFi.h>
 #include "commbuffer.h"
 
@@ -72,9 +69,8 @@ public:
     bool getMonitorMode();
 
 private:
-#ifndef CONFIG_IDF_TARGET_ESP32S3
-    BluetoothSerial serialBT;
-#endif
+    BLEUART ble;
+
     WiFiClient *mClient;
     CommBuffer txBuffer;
     char incomingBuffer[128]; // storage for one incoming line
@@ -92,6 +88,12 @@ private:
     void processCmd();
     String processELMCmd(char *cmd);
     void sendTxBuffer();
+
+    uint8_t isotpBuffer[256];
+    uint16_t isotpLen;
+    uint16_t isotpPos;
+    bool isotpActive;
+    uint8_t isotpNextSeq;
 };
 
 #endif

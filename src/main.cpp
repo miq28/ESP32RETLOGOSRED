@@ -117,7 +117,8 @@ void loadSettings()
     settings.useBinarySerialComm = nvPrefs.getBool("binarycomm", false);
     settings.logLevel = nvPrefs.getUChar("loglevel", 1); // info
     settings.wifiMode = nvPrefs.getUChar("wifiMode", 1); // Wifi defaults to creating an AP
-    settings.enableBT = nvPrefs.getBool("enable-bt", false);
+    // settings.enableBT = nvPrefs.getBool("enable-bt", true);
+    settings.enableBT = true;
     settings.enableLawicel = nvPrefs.getBool("enableLawicel", true);
     settings.systemType = 0;
 
@@ -201,7 +202,7 @@ void setup()
     espChipRevision = ESP.getChipRevision();
 
     SAVVYPORT.begin(1000000);
-    DEBUGPORT.begin(115200);
+    DEBUGPORT.begin(1000000);
 
     // Create the mutex before using it
     serialMutex = xSemaphoreCreateMutex();
@@ -217,9 +218,11 @@ void setup()
 
     loadSettings();
 
+    canManager.setup();
+
     if (settings.enableBT)
     {
-        Serial.println("Starting Bluetooth");
+        DEBUGLN("Starting Bluetooth");
         elmEmulator.setup();
     }
     wifiManager.setup();
@@ -234,8 +237,6 @@ void setup()
     Serial.println("        - Marcus Aurelius            ");
     Serial.println("=====================================");
     Serial.println("");
-
-    canManager.setup();
 
     SysSettings.lawicelMode = false;
     SysSettings.lawicelAutoPoll = false;
